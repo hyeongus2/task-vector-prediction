@@ -1,0 +1,36 @@
+# ---------------------
+# Environment / Cache / Checkpoint
+# ---------------------
+.cache/
+.dotnet/
+.ipython/
+.jupyter/
+.local/
+.venv/
+.vessl/
+.vscode/
+.vscode-server/
+.env
+.wget-hsts
+
+# ---------------------
+# Shell history / user profile
+# ---------------------
+.bash_history
+.bash_logout
+.bashrc
+.lesshst
+.profile
+
+# ---------------------
+# Security / Credentials / Personal Config
+# ---------------------
+.ssh/
+.gitconfig
+
+# ---------------------
+# Ignore temporary/test files
+# ---------------------
+create_inits.py
+temp.*
+*.tmp
