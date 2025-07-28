@@ -34,14 +34,3 @@ lora:
     steps: 50
     alpha: 16
     dropout: 0.1
-
-# 저장 및 분석 설정
-save:
-  dir: results/mlpbase_regression/
-  save_model: true
-  save_taus: true
-  plot_results: true
-
-analysis:
-  analyze_tau: true
-  fit_exponential: false

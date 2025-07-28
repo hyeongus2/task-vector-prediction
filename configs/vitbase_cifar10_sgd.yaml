@@ -1,0 +1,41 @@
+model:
+    name: vit_base_patch16_224
+    type: vision
+    pretrained: true
+
+data:
+    name: CIFAR10
+    task: classification
+    output_dim: 10
+    batch_size: 64
+
+train:
+    epochs: 30
+    lr: 1e-3
+    optimizer: sgd
+    scheduler: cosine
+    early_stop: true
+    early_stop_patience: 5
+
+lora:
+    enabled: true
+    rank: 8
+    steps: 50
+    alpha: 16
+    dropout: 0.1
+
+save:
+    enabled: true
+    every: 5
+
+log:
+    save_dir: results/${file.name}/
+    save_model: true
+    log_metrics: true
+    plot_results: true
+    wandb:
+        enabled: true
+        project: vit-cifar10
+        entity: your_entity_name
+        name: vitbase_cifar10_sgd
+    

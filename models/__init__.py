@@ -1,32 +1,29 @@
 # models/__init__.py
 
 from .mlp import build_mlp
-# from .resnet import build_resnet18
-# from .vit import build_vit_tiny
-# from .lm import build_minilm
+from .pretrained import load_pretrained_model
+import torch.nn as nn
 
-def build_model(config: dict):
+def build_model(config: dict) -> nn.Module:
     """
     Builds a model based on the provided configuration dictionary.
-    
+
     Args:
-        config (dict): Configuration dictionary containing model parameters.
-        
+        config (dict): Must contain:
+            - config["model"]["type"] (str): Type of model ('mlp', 'resnet18', 'vit_base_patch16_224', etc.)
+            - config["model"]["name"] (str): Backbone model name for pretrained models
+            - config["data"]["task"] (str): Task type (classification, regression, feature_extraction)
+
     Returns:
-        nn.Module: The constructed model.
+        nn.Module: Constructed and initialized model
     """
-    model_type = config.get('type', '').lower()
-    
-    if model_type == 'mlp':
+    model_type = config["model"].get("type", "").lower()
+
+    if not model_type:
+        raise ValueError("[ERROR] Model type must be specified under config['model']['type'].")
+
+    if model_type == "mlp":
         return build_mlp(config)
-    elif model_type == 'resnet18':
-        raise NotImplementedError("ResNet18 model building is not implemented yet.")
-    #     return build_resnet18(config)
-    elif model_type == 'vit_tiny':
-        raise NotImplementedError("ViT Tiny model building is not implemented yet.")
-    #     return build_vit_tiny(config)
-    elif model_type == 'minilm':
-        raise NotImplementedError("MiniLM model building is not implemented yet.")
-    #     return build_minilm(config)
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
+
+    # Assume all non-MLP types are pretrained models (vision/text)
+    return load_pretrained_model(config)
