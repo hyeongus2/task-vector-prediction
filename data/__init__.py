@@ -1,6 +1,6 @@
 # data/__init__.py
 
-from .vision import get_vision_datasets
+from .image import get_image_datasets
 from torch.utils.data import Dataset
 from typing import Tuple
 
@@ -22,7 +22,7 @@ def get_datasets(config: dict) -> Tuple[Dataset, Dataset]:
     if model_type not in VALID_MODEL_TYPES:
         raise ValueError(f"[ERROR] Unsupported model type '{model_type}'. Supported types are: {VALID_MODEL_TYPES}")
 
-    if model_type == 'vision':
-        return get_vision_datasets(config)
+    if model_type == 'image':
+        return get_image_datasets(config)
     else:
         raise NotImplementedError(f"[ERROR] get_dataset for model type '{model_type}' is not yet implemented.")

@@ -1,6 +1,6 @@
 model:
     name: vit_base_patch16_224
-    type: vision
+    type: image
     pretrained: true
 
 data:
@@ -10,10 +10,10 @@ data:
     batch_size: 64
 
 train:
+    strategy: finetune
     epochs: 30
     lr: 1e-3
     optimizer: sgd
-    scheduler: cosine
     early_stop: true
     early_stop_patience: 5
 

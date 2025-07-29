@@ -1,14 +1,13 @@
-# data/vision.py
-# This module provides raw torchvision vision datasets (train/test) without transform.
+# data/image.py
+# This module provides raw torchvision image datasets (train/test) without transform.
 # The transform should be applied externally (e.g., in train.py) based on model input requirements.
 
 import torchvision.datasets as tv_datasets
-from typing import Tuple
 from torch.utils.data import Dataset
 
-def get_vision_datasets(config: dict) -> Tuple[Dataset, Dataset]:
+def get_image_datasets(config: dict) -> tuple[Dataset, Dataset]:
     """
-    Load raw train/test vision datasets based on config.
+    Load raw train/test image datasets based on config.
     This function does NOT apply any transforms. Transforms (e.g., Resize, ToTensor)
     should be set externally (e.g., train.py) based on model input shape.
 

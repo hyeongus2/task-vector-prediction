@@ -1,4 +1,14 @@
 # ---------------------
+# Python
+# ---------------------
+__pycache__/
+*.egg-info/
+*.egg
+*.pkl
+*.py[cod]
+*.so
+
+# ---------------------
 # Environment / Cache / Checkpoint
 # ---------------------
 .cache/
@@ -7,6 +17,7 @@
 .jupyter/
 .local/
 .venv/
+.venv*/
 .vessl/
 .vscode/
 .vscode-server/
@@ -21,6 +32,13 @@
 .bashrc
 .lesshst
 .profile
+
+# ---------------------
+# Logs
+# ---------------------
+checkpoints/
+logs/
+*.log
 
 # ---------------------
 # Security / Credentials / Personal Config
