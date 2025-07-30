@@ -12,17 +12,17 @@ class LoRATrainer(BaseTrainer):
 
         if model_type == "text":
             if data_task == "classification":
-                return TaskType.SEQ_CLS
+                task_type = TaskType.SEQ_CLS
             elif data_task == "regression":
-                return TaskType.REGRESSION
+                task_type = TaskType.REGRESSION
             elif data_task == "feature_extraction":
-                return TaskType.FEATURE_EXTRACTION
+                task_type = TaskType.FEATURE_EXTRACTION
 
         elif model_type == "image":
-            return TaskType.FEATURE_EXTRACTION
+            task_type = TaskType.FEATURE_EXTRACTION
 
-        elif model_type in ["tabular", "synthetic"]:
-            return TaskType.FEATURE_EXTRACTION
+        elif model_type in {"tabular", "synthetic"}:
+            task_type = TaskType.FEATURE_EXTRACTION
 
         else:
             raise ValueError(f"Unsupported model/data task combination: {model_type}, {data_task}")
@@ -32,12 +32,12 @@ class LoRATrainer(BaseTrainer):
 
         # 3. Build LoRA config
         peft_config = LoraConfig(
-            task_type=data_task,
+            task_type=task_type,
             inference_mode=False,
-            r=config["lora"].get("r", 8),
+            r=config["lora"].get("rank", 8),
             lora_alpha=config["lora"].get("alpha", 16),
             lora_dropout=config["lora"].get("dropout", 0.1),
-            bias="none",
+            bias=config["lora"].get("bias", "none"),
             target_modules=target_modules
         )
 

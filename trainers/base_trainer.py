@@ -21,18 +21,19 @@ class BaseTrainer():
         self.model.to(self.device)
 
         self.criterion, self.optimizer = self.get_criterion_and_optimizer()
-        self.epochs = config["train"].get("epochs", 10)
+        self.epochs = config["finetuning"].get("epochs", 10)
 
         # Early stopping params
-        self.patience = config["train"].get("patience", 5)
-        self.delta = config["train"].get("delta", 1e-4)
+        self.early_stop_enabled = config.get("early_stop", {}).get("enabled", False)
+        self.patience = config.get("early_stop", {}).get("patience", 3)
+        self.delta = config.get("early_stop", {}).get("delta", 1e-4)
         self.best_loss = float('inf')
         self.no_improve = 0
 
         # Save
-        self.save_enabled = config["save"]["enable"]
+        self.save_enabled = config["save"]["enabled"]
         self.save_every = config["save"].get("every", 10)
-        self.save_max = self.save_every * config["save"].get("max", float('inf'))
+        self.save_max = self.save_every * config["save"]["max"] if config["save"].get("max", 0) else float('inf')
         self.save_path = config["save"]["path"]
 
         # Set seed
@@ -41,9 +42,9 @@ class BaseTrainer():
 
     def get_criterion_and_optimizer(self):
         task = self.config["data"]["task"]
-        opt_name = self.config["train"].get("optimizer", "adam")
-        lr = self.config["train"].get("lr", 1e-4)
-        momentum = self.config["train"].get("momentum", 0.9)
+        opt_name = self.config["finetuning"].get("optimizer", "adam")
+        lr = self.config["finetuning"].get("lr", 1e-4)
+        momentum = self.config["finetuning"].get("momentum", 0.9)
 
         criterion = nn.CrossEntropyLoss() if task == "classification" else nn.MSELoss()
         if opt_name == "adam":

@@ -34,7 +34,7 @@ def load_pretrained_model(config: dict) -> nn.Module:
     output_dim: int = config['data'].get("output_dim", 0)
 
     # Check validity of task
-    VALID_TASKS = ['classification', 'regression', 'feature_extraction']
+    VALID_TASKS = {'classification', 'regression', 'feature_extraction'}
     if task not in VALID_TASKS:
         raise ValueError(f"[ERROR] Invalid task '{task}'. Must be one of {VALID_TASKS}.")
 

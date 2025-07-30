@@ -12,15 +12,11 @@ def build_model(config: dict) -> nn.Module:
     Args:
         config (dict): Must contain:
             - config["model"]["name"] (str): Backbone model name for pretrained models (e.g., "mlp", "resnet18", "vit_base_patch16_224", etc.)
-            - config["data"]["task"] (str): Task type (classification, regression, feature_extraction)
 
     Returns:
         nn.Module: Constructed and initialized model
     """
-    model_name = config["model"].get("name", "").lower()
-
-    if not model_name:
-        raise ValueError("[ERROR] Model name must be specified under config['model']['name'].")
+    model_name = config["model"]["name"].lower()
 
     if model_name == "mlp":
         return build_mlp(config)

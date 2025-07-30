@@ -50,7 +50,7 @@ def init_logger(config):
     # WandB
     if config["logging"].get("use_wandb", False):
         wandb.init(
-            project=config["logging"]["wandb_project"],
+            project=config["logging"].get("wandb_project", "task_vector_prediction"),
             name=config["logging"].get("run_name", run_name),
             config=flatten_config(config)
         )

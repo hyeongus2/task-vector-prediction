@@ -107,7 +107,7 @@ def main():
     config = merge_config(config, override_dict)
 
     # Add save path to config
-    save_path = get_save_path(config_path=config_path, overrides=override_dict)
+    save_path = config["save"].get("path", get_save_path(config_path=config_path, overrides=override_dict))
     config["save"]["path"] = save_path
 
     # 2. Set seed

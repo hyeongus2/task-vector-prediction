@@ -15,7 +15,7 @@ def get_datasets(config: dict) -> Tuple[Dataset, Dataset]:
     Returns:
         Tuple[Dataset, Dataset]: train_dataset and test_dataset (raw, untransformed)
     """
-    VALID_MODEL_TYPES = ['vision', 'text', 'tabular', 'synthetic']
+    VALID_MODEL_TYPES = {'image', 'text', 'tabular', 'synthetic'}
 
     model_type = config['model']['type'].lower()
 

@@ -11,19 +11,19 @@ data:
 
 finetuning:
     method: lora
-    epochs: 30
+    epochs: 10
     lr: 1e-3
     optimizer: sgd
     momentum: 0.0
-    early_stop: true
-    early_stop_patience: 3
 
 lora:
-    enabled: true
     rank: 8
-    steps: 50
     alpha: 16
     dropout: 0.1
+
+early_stop:
+    enabled: true
+    patience: 3
 
 save:
     enabled: true
@@ -32,4 +32,3 @@ save:
 logging:
     enabled: true
     use_wandb: true
-    wandb_project: task_vector_prediction
