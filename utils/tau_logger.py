@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 from typing import Optional
 from wandb import Table, Histogram, Artifact, Image
 
-def log_tau_scalar(tau: torch.Tensor, step: int):
+def log_tau_scalar(tau: torch.Tensor, step: int, mode: str):
     """Logs individual tau[i] values as scalars."""
     jump = tau.numel() // 100
-    metrics = {f"tau/val_{i}": v for i, v in enumerate(tau.cpu().tolist()[:tau.numel():jump])}
+    metrics = {f"tau_{mode}/val_{i:03d}": v for i, v in enumerate(tau.cpu().tolist()[:tau.numel():jump])}
     wandb.log(metrics, step=step)
 
 def log_tau_histogram(tau: torch.Tensor, step: int):

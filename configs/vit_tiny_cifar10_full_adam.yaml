@@ -12,9 +12,8 @@ data:
 finetuning:
     method: full
     epochs: 10
-    lr: 1.e-3
-    optimizer: sgd
-    momentum: 0.0
+    lr: 1.e-4
+    optimizer: adam
 
 early_stop:
     enabled: true

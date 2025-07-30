@@ -84,7 +84,12 @@ def save_tau(
     assert mode in ["step", "epoch", "star"]
     assert (step is not None) if mode == "step" else (epoch is not None)
 
-    subdir = "tau_early" if mode == "step" else "tau_epoch"
+    subdir = {
+        "step": "tau_early",
+        "epoch": "tau_epoch",
+        "star": ""
+    }[mode]
+    
     save_dir = os.path.join(out_dir, subdir)
     os.makedirs(save_dir, exist_ok=True)
 

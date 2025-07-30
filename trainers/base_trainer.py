@@ -9,6 +9,7 @@ from tqdm import tqdm
 from collections import OrderedDict
 from utils.seed import set_seed
 from utils.tau_utils import get_tau, save_tau
+from utils.tau_logger import log_tau_scalar
 
 class BaseTrainer():
     def __init__(self, config: dict, model: nn.Module, train_loader, test_loader, logger):
@@ -83,7 +84,7 @@ class BaseTrainer():
                 if self.save_enabled and step < self.save_max and step % self.save_every == 0:
                     tau, meta = get_tau(self.model, self.pretrained_state)
                     save_tau(tau, meta, step=step, mode="step", out_dir=self.save_path)
-                    self.logger.log_wandb(tau=tau, step=step, path=None)
+                    self.logger.log_wandb(tau=tau, step=step, mode="step", path=None)
                 step += 1
 
                 # update tqdm progress bar with loss
@@ -100,10 +101,11 @@ class BaseTrainer():
             # Validation after every epoch
             val_loss = self.eval(epoch)
 
+            log_tau_scalar(tau=tau, step=step, mode="epoch")
             self.logger.log_wandb_scalar({
                 "loss/train": train_loss,
                 "loss/val": val_loss,
-            }, step=epoch+1)
+            }, step=step)
 
             # Early stopping check (based on val_loss)
             if val_loss + self.delta < self.best_loss:
