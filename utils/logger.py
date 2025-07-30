@@ -64,14 +64,22 @@ def init_logger(config):
             if config["logging"].get("log_tau_artifact", False) and path:
                 tau_logger.log_tau_artifact(path, step)
 
+        def log_wandb_scalar(metrics: dict, step: Optional[int] = None):
+            if step is not None:
+                wandb.log(metrics, step=step)
+            else:
+                wandb.log(metrics)
+
         def finish_wandb():
             wandb.finish()
 
         logger.log_wandb = log_wandb
+        logger.log_wandb_scalar = log_wandb_scalar
         logger.finish_wandb = finish_wandb
         
     else:
-        logger.log_wandb = lambda *args, **kwargs: None     # Dummy
-        logger.finish_wandb = lambda *args, **kwargs: None  # Dummy
+        logger.log_wandb = lambda *args, **kwargs: None         # Dummy
+        logger.log_wandb_scalar = lambda *args, **kwargs: None  # Dummy
+        logger.finish_wandb = lambda *args, **kwargs: None      # Dummy
 
     return logger

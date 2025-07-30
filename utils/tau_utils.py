@@ -75,20 +75,26 @@ def save_tau(
         meta (List): Metadata to reconstruct parameters.
         step (int): Optional step index.
         epoch (int): Optional epoch index.
-        mode (str): Either 'step' or 'epoch'.
+        mode (str): One of {'step', 'epoch', 'star'}.
         out_dir (str): Base directory to save.
 
     Returns:
         str: Full path where tau was saved.
     """
-    assert mode in ["step", "epoch"]
+    assert mode in ["step", "epoch", "star"]
     assert (step is not None) if mode == "step" else (epoch is not None)
 
     subdir = "tau_early" if mode == "step" else "tau_epoch"
     save_dir = os.path.join(out_dir, subdir)
     os.makedirs(save_dir, exist_ok=True)
 
-    fname = f"tau_step_{step:04d}.pt" if mode == "step" else f"tau_epoch_{epoch+1:03d}.pt"
+    if mode == "step":
+        fname = f"tau_step_{step:04d}.pt"
+    elif mode == "epoch":
+        fname = f"tau_epoch_{epoch+1:03d}.pt"
+    else:
+        fname = f"tau_star.pt"
+
     path = os.path.join(save_dir, fname)
 
     torch.save({"tau": tau, "meta": meta}, path)

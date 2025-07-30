@@ -81,6 +81,7 @@ class BaseTrainer():
                 if self.save_enabled and step < self.save_max and step % self.save_every == 0:
                     tau, meta = get_tau(self.model, self.pretrained_state)
                     save_tau(tau, meta, step=step, mode="step", out_dir=self.save_path)
+                    self.logger.log_wandb(tau=tau, step=step, path=None)
                 step += 1
 
                 # update tqdm progress bar with loss
@@ -97,11 +98,19 @@ class BaseTrainer():
             # Validation after every epoch
             val_loss = self.eval(epoch)
 
+            self.logger.log_wandb_scalar({
+                "loss/train": train_loss,
+                "loss/val": val_loss,
+            }, step=epoch+1)
+
             # Early stopping check (based on val_loss)
             if val_loss + self.delta < self.best_loss:
                 self.best_loss = val_loss
                 self.no_improve = 0
-                self.save_model()
+                if self.save_enabled:
+                    self.save_model()
+                    save_tau(tau, meta, epoch=epoch, mode="star", out_dir=self.save_path)
+                    self.logger.info(f"Saved best model and corresponding tau_star at epoch {epoch+1}")
             else:
                 self.no_improve += 1
                 if self.no_improve >= self.patience:

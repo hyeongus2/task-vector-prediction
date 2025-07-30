@@ -179,6 +179,7 @@ def main():
     # 9. Train
     logger.info("[6/6] Starting training loop...")
     trainer.train()
+    logger.finish_wandb()
 
 
 if __name__ == "__main__":
