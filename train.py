@@ -1,18 +1,17 @@
 # train.py
 
-import os
 import argparse
 import yaml
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from torchvision.datasets import VisionDataset
 from ast import literal_eval
 
 from models import build_model
 from data import get_datasets
 from trainers import get_trainer
+from utils.paths import get_save_path
 from utils.seed import set_seed
 from utils.logger import init_logger
 
@@ -107,6 +106,9 @@ def main():
     config = load_config(config_path)
     config = merge_config(config, override_dict)
 
+    save_path = get_save_path(config_path=config_path, overrides=override_dict)
+    config["save"]["path"] = save_path
+
     # 2. Set seed
     set_seed(config.get("seed", 42))
 
@@ -137,8 +139,8 @@ def main():
         transform_list.append(transforms.ToTensor())
 
         transform = transforms.Compose(transform_list)
-        train_dataset.transform = transform # type: ignore
-        test_dataset.transform = transform  # type: ignore
+        train_dataset.transform = transform
+        test_dataset.transform = transform
 
     elif model_type == "text":
         # Assuming the dataset is already tokenized by get_datasets
@@ -173,10 +175,9 @@ def main():
     logger.info("[5/6] Creating trainer...")
     trainer = get_trainer(config, model, train_loader, test_loader, logger)
 
-    # 9. Train & evaluate
+    # 9. Train
     logger.info("[6/6] Starting training loop...")
     trainer.train()
-    trainer.eval()
 
 
 if __name__ == "__main__":
