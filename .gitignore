@@ -66,8 +66,9 @@ data/
 # ---------------------
 # Security / Personal Config
 # ---------------------
-.ssh/
+.config/
 .gitconfig
+.ssh/
 
 # ---------------------
 # OS-specific

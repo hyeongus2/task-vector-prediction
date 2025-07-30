@@ -2,6 +2,7 @@
 # This module loads a pretrained model and modifies its final layer based on the task.
 
 import torch.nn as nn
+from .model_utils import get_head_in_features, reset_head
 
 try:
     import torchvision.models as tv_models
@@ -41,18 +42,19 @@ def load_pretrained_model(config: dict) -> nn.Module:
     if task in ['classification', 'regression'] and output_dim <= 0:
         raise ValueError("[ERROR] output_dim must be positive for classification/regression tasks.")
 
-    # Load model
+    # Load torchvision model
     if tv_models is not None and hasattr(tv_models, model_name):
         model = getattr(tv_models, model_name)(pretrained=pretrained)
 
         # torchvision models need explicit handling for output layer modification
         # Remove head for feature extraction tasks
         if task == 'feature_extraction':
-            _replace_output_layer(model, nn.Identity())
+            reset_head(model, nn.Identity())
         else:
-            in_features = _get_in_features(model)
-            _replace_output_layer(model, nn.Linear(in_features, output_dim))
+            in_features = get_head_in_features(model)
+            reset_head(model, nn.Linear(in_features, output_dim))
 
+    # Load timm model
     elif timm is not None and model_name in timm.list_models():
         num_classes = 0 if task == 'feature_extraction' else output_dim
         model = timm.create_model(model_name, pretrained=pretrained, num_classes=num_classes)
@@ -61,54 +63,3 @@ def load_pretrained_model(config: dict) -> nn.Module:
         raise ImportError("[ERROR] Model not found in torchvision or timm.")
 
     return model
-
-
-def _get_in_features(model: nn.Module) -> int:
-    """
-    Get the number of input features for the final layer of the model.
-
-    Args:
-        model (nn.Module): The model to inspect.
-    
-    Returns:
-        int: Number of input features for the final layer.
-    """
-    for attr_name in ['fc', 'classifier', 'head']:
-        if hasattr(model, attr_name):
-            layer = getattr(model, attr_name)
-            if isinstance(layer, nn.Linear):
-                return layer.in_features
-            elif isinstance(layer, nn.Sequential):
-                # If the layer is a Sequential, inspect its last module
-                return _get_in_features(layer[-1])
-            
-    if hasattr(model, 'get_classifier') and callable(model.get_classifier):  # for timm models
-        classifier = model.get_classifier()
-        if isinstance(classifier, nn.Linear):
-            return classifier.in_features
-        elif isinstance(classifier, nn.Sequential):
-            return _get_in_features(classifier[-1])
-        
-    raise NotImplementedError("[ERROR] Cannot extract in_features: unsupported model structure.")
-
-
-def _replace_output_layer(model: nn.Module, new_layer: nn.Module):
-    """
-    Replace the final layer of the model with a new layer.
-
-    Args:
-        model (nn.Module): The model to modify.
-        new_layer (nn.Linear): The new output layer to replace the existing one.
-    """
-    for attr_name in ['fc', 'classifier', 'head']:
-        if hasattr(model, attr_name) and isinstance(getattr(model, attr_name), (nn.Linear, nn.Sequential)):
-            setattr(model, attr_name, new_layer)
-            return
-
-    if hasattr(model, 'reset_classifier') and callable(model.reset_classifier):  # for timm models
-        if not hasattr(new_layer, 'out_features'):
-            raise ValueError("[ERROR] new_layer must have 'out_features' attribute for reset_classifier.")
-        model.reset_classifier(num_classes=new_layer.out_features)
-        return
-    
-    raise NotImplementedError("[ERROR] Cannot replace output layer: unsupported model structure.")

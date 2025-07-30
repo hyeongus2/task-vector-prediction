@@ -9,8 +9,8 @@ data:
     output_dim: 10
     batch_size: 64
 
-train:
-    strategy: finetune
+finetuning:
+    method: lora
     epochs: 30
     lr: 1e-3
     optimizer: sgd
