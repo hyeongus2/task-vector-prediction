@@ -1,0 +1,29 @@
+model:
+    name: vit_tiny_patch16_224
+    type: image
+    pretrained: true
+
+data:
+    name: CIFAR10
+    task: classification
+    output_dim: 10
+    batch_size: 128
+
+finetuning:
+    method: full
+    epochs: 10
+    lr: 1.e-3
+    optimizer: sgd
+    momentum: 0.0
+
+early_stop:
+    enabled: true
+    patience: 3
+
+save:
+    enabled: true
+    every: 10
+
+logging:
+    enabled: true
+    use_wandb: true

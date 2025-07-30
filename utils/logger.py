@@ -58,7 +58,8 @@ def init_logger(config):
         def log_wandb(*, tau: torch.Tensor, step: int, path: Optional[str] = None):
             tau_logger.log_tau_scalar(tau, step)
             tau_logger.log_tau_histogram(tau, step)
-            tau_logger.log_tau_table(tau, step)
+            if config["logging"].get("log_tau_table", False):
+                tau_logger.log_tau_table(tau, step)
             if config["logging"].get("log_tau_plot", False):
                 tau_logger.log_tau_plot(tau, step)
             if config["logging"].get("log_tau_artifact", False) and path:

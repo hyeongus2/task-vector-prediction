@@ -4,6 +4,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import copy
 from tqdm import tqdm
 from collections import OrderedDict
 from utils.seed import set_seed
@@ -13,12 +14,12 @@ class BaseTrainer():
     def __init__(self, config: dict, model: nn.Module, train_loader, test_loader, logger):
         self.config = config
         self.model = model
-        self.pretrained_state: OrderedDict = OrderedDict(model.state_dict())
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.logger = logger
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
+        self.pretrained_state: OrderedDict = copy.deepcopy(OrderedDict(model.state_dict()))
 
         self.criterion, self.optimizer = self.get_criterion_and_optimizer()
         self.epochs = config["finetuning"].get("epochs", 10)
@@ -83,6 +84,24 @@ class BaseTrainer():
                     tau, meta = get_tau(self.model, self.pretrained_state)
                     save_tau(tau, meta, step=step, mode="step", out_dir=self.save_path)
                     self.logger.log_wandb(tau=tau, step=step, path=None)
+
+                    for name, param in self.model.named_parameters():
+                        if name in self.pretrained_state:
+                            pre = self.pretrained_state[name]
+
+                            if param.shape == pre.shape:
+                                delta = (param.detach() - pre.detach())
+
+                                print(f"[DEBUG] Parameter: {name}")
+                                print(f"  - shape: {param.shape}")
+                                print(f"  - delta norm: {delta.norm().item():.6f}")
+                                print(f"  - delta max: {delta.max().item():.6f}")
+                                print(f"  - delta min: {delta.min().item():.6f}")
+                                print(f"  - param[:5]: {param.flatten()[:5].tolist()}")
+                                print(f"  - pre  [:5]: {pre.flatten()[:5].tolist()}")
+                            else:
+                                print(f"[DEBUG] Skipping {name} due to shape mismatch: {param.shape} vs {pre.shape}")
+                            break
                 step += 1
 
                 # update tqdm progress bar with loss
