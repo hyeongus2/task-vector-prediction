@@ -1,70 +1,51 @@
 # trainers/lora.py
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
 from peft import get_peft_model, LoraConfig, TaskType
 from trainers.base_trainer import BaseTrainer
+from models.model_utils import get_lora_target_modules
 
 class LoRATrainer(BaseTrainer):
     def __init__(self, config, model, train_loader, test_loader, logger):
-        # Apply LoRA
+        # 1. Determine task type
+        model_type = config["model"]["type"]
+        data_task = config["data"]["task"]
+
+        if model_type == "text":
+            if data_task == "classification":
+                return TaskType.SEQ_CLS
+            elif data_task == "regression":
+                return TaskType.REGRESSION
+            elif data_task == "feature_extraction":
+                return TaskType.FEATURE_EXTRACTION
+
+        elif model_type == "image":
+            return TaskType.FEATURE_EXTRACTION
+
+        elif model_type in ["tabular", "synthetic"]:
+            return TaskType.FEATURE_EXTRACTION
+
+        else:
+            raise ValueError(f"Unsupported model/data task combination: {model_type}, {data_task}")
+
+        # 2. Find target modules using model_utils
+        target_modules = config["lora"].get("target_modules", get_lora_target_modules(model))
+
+        # 3. Build LoRA config
         peft_config = LoraConfig(
-            task_type=TaskType.FEATURE_EXTRACTION if config["data"]["task"] == "feature_extraction" else TaskType.REGRESSION,
+            task_type=data_task,
             inference_mode=False,
             r=config["lora"].get("r", 8),
             lora_alpha=config["lora"].get("alpha", 16),
             lora_dropout=config["lora"].get("dropout", 0.1),
             bias="none",
-            target_modules=config["lora"].get("target_modules", ["q", "v", "fc"])
+            target_modules=target_modules
         )
+
+        # 4. Apply LoRA
         model = get_peft_model(model, peft_config)
 
+        # 5. Continue as BaseTrainer
         super().__init__(config, model, train_loader, test_loader, logger)
 
         self.logger.info("LoRA applied. Trainable params:")
         self.model.print_trainable_parameters()
-
-
-    def train(self):
-        self.model.train()
-        for epoch in range(self.epochs):
-            total_loss = 0.0
-            for x, y in self.train_loader:
-                x, y = x.to(self.device), y.to(self.device)
-
-                self.optimizer.zero_grad()
-                pred = self.model(x)
-                loss = self.criterion(pred, y)
-                loss.backward()
-                self.optimizer.step()
-
-                total_loss += loss.item()
-
-            avg_loss = total_loss / len(self.train_loader)
-            self.logger.info(f"[Epoch {epoch+1}] Train Loss: {avg_loss:.4f}")
-
-            # Early stopping check
-            if avg_loss + self.delta < self.best_loss:
-                self.best_loss = avg_loss
-                self.no_improve = 0
-                self.save_model()
-            else:
-                self.no_improve += 1
-                if self.no_improve >= self.patience:
-                    self.logger.info("Early stopping triggered.")
-                    break
-
-
-    def eval(self):
-        self.model.eval()
-        total_loss = 0.0
-        with torch.no_grad():
-            for x, y in self.test_loader:
-                x, y = x.to(self.device), y.to(self.device)
-                pred = self.model(x)
-                loss = self.criterion(pred, y)
-                total_loss += loss.item()
-
-        avg_loss = total_loss / len(self.test_loader)
-        self.logger.info(f"[Evaluation] Test Loss: {avg_loss:.4f}")

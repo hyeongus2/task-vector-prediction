@@ -4,6 +4,7 @@ import os
 import torch
 import torch.nn as nn
 from collections import OrderedDict
+from typing import Optional
 
 
 def get_flat_params(model: nn.Module, only_require_grad: bool = False) -> torch.Tensor:
@@ -61,8 +62,8 @@ def get_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch.Tens
 def save_tau(
         tau: torch.Tensor,
         meta: list[tuple[str, torch.Size, int, int]],
-        step: int = None,
-        epoch: int = None,
+        step: Optional[int] = None,
+        epoch: Optional[int] = None,
         mode: str = "step",
         out_dir: str = "checkpoints"
     ) -> str:
@@ -127,7 +128,7 @@ def reconstruct_model(pretrained_state: OrderedDict, tau: torch.Tensor, meta: li
     return new_state
 
 
-def compute_tau_distance(tau1: torch.Tensor, tau2: torch.Tensor, p: int = 2) -> float:
+def tau_distance(tau1: torch.Tensor, tau2: torch.Tensor, p: int = 2) -> float:
     """
     Compute Lp distance between two tau vectors.
 
@@ -140,3 +141,32 @@ def compute_tau_distance(tau1: torch.Tensor, tau2: torch.Tensor, p: int = 2) -> 
         float: Distance value.
     """
     return torch.norm(tau1 - tau2, p=p).item()
+
+
+def tau_magnitude(tau: torch.Tensor, p:int = 2) -> float:
+    """
+    Compute the magnitude (L2 norm) of a tau vector.
+
+    Args:
+        tau (torch.Tensor): Tau vector.
+        p (int): Norm order (default=2 for Euclidean)
+
+    Returns:
+        float: L-p norm of tau.
+    """
+    return torch.norm(tau, p=p).item()
+
+
+def tau_cosine_similarity(tau1: torch.Tensor, tau2: torch.Tensor) -> float:
+    """
+    Compute cosine similarity between two tau vectors.
+
+    Args:
+        tau1 (torch.Tensor): First tau vector.
+        tau2 (torch.Tensor): Second tau vector.
+
+    Returns:
+        float: Cosine similarity value in [-1, 1].
+    """
+    return torch.nn.functional.cosine_similarity(tau1, tau2, dim=0).item()
+    

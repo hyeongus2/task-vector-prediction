@@ -19,7 +19,7 @@ def get_save_path(config_path: str, overrides: dict = {}, base_dir: str = "check
 
     if overrides:
         # Sort keys for deterministic name
-        suffix = "_" + "_".join(f"{k}{v}" for k, v in sorted(overrides.items()))
+        suffix = "_" + "_".join(f"{k}={v}" for k, v in sorted(overrides.items()))
         exp_name = base_name + suffix
     else:
         exp_name = base_name
