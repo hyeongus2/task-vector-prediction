@@ -10,11 +10,13 @@ fi
 
 # [2] Experiment name and config path
 EXP_NAME="vit_cifar10_sgd"
-CONFIG_PATH="configs/vit_tiny_cifar10_sgd.yaml"
+CONFIG_PATH="configs/vit_tiny_cifar10_full_sgd.yaml"
+TASK="train.py"
+# TASK="analyze.py"
 
 # [3] Running
 echo "Running experiment: $EXP_NAME"
-python train.py --config $CONFIG_PATH
+python $TASK --config $CONFIG_PATH
 
 # [4] Finished
 echo "Experiment $EXP_NAME finished."
