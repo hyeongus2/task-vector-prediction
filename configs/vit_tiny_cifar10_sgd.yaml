@@ -29,14 +29,7 @@ save:
     enabled: true
     every: 10
 
-log:
-    save_dir: results/${file.name}/
-    save_model: true
-    log_metrics: true
-    plot_results: true
-    wandb:
-        enabled: true
-        project: vit-cifar10
-        entity: your_entity_name
-        name: vitbase_cifar10_sgd
-    
+logging:
+    enabled: true
+    use_wandb: true
+    wandb_project: task_vector_prediction

@@ -12,11 +12,13 @@ __pycache__/
 # ---------------------
 # Virtual Environments / IDE / Build
 # ---------------------
+.netrc
 .venv/
 .venv*/
 .vessl/
 .vscode/
 .vscode-server/
+.wandb/
 *.ckpt
 *.pt
 *.pth
