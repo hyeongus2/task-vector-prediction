@@ -1,0 +1,42 @@
+model:
+    name: vit_tiny_patch16_224
+    type: image
+    pretrained: true
+
+data:
+    name: CIFAR10
+    task: classification
+    output_dim: 10
+    batch_size: 128
+
+finetuning:
+    method: lora
+    epochs: 30
+    lr: 1e-3
+    optimizer: sgd
+    momentum: 0.0
+    early_stop: true
+    early_stop_patience: 3
+
+lora:
+    enabled: true
+    rank: 8
+    steps: 50
+    alpha: 16
+    dropout: 0.1
+
+save:
+    enabled: true
+    every: 10
+
+log:
+    save_dir: results/${file.name}/
+    save_model: true
+    log_metrics: true
+    plot_results: true
+    wandb:
+        enabled: true
+        project: vit-cifar10
+        entity: your_entity_name
+        name: vitbase_cifar10_sgd
+    

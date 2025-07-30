@@ -4,6 +4,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from tqdm import tqdm
 from collections import OrderedDict
 from utils.seed import set_seed
 from utils.tau_utils import get_tau, save_tau
@@ -61,7 +62,11 @@ class BaseTrainer():
         for epoch in range(self.epochs):
             self.model.train()
             total_loss = 0.0
-            for x, y in self.train_loader:
+
+            # tqdm wrapper for step progress bar
+            pbar = tqdm(self.train_loader, desc=f"[Epoch {epoch+1}/{self.epochs}] Train", leave=False)
+
+            for x, y in pbar:
                 x, y = x.to(self.device), y.to(self.device)
 
                 self.optimizer.zero_grad()
@@ -77,6 +82,9 @@ class BaseTrainer():
                     tau, meta = get_tau(self.model, self.pretrained_state)
                     save_tau(tau, meta, step=step, mode="step", out_dir=self.save_path)
                 step += 1
+
+                # update tqdm progress bar with loss
+                pbar.set_postfix(loss=loss.item())
 
             train_loss = total_loss / len(self.train_loader)
             self.logger.info(f"[Epoch {epoch+1}] Train Loss: {train_loss:.4f}")
@@ -104,12 +112,16 @@ class BaseTrainer():
     def eval(self, epoch=None) -> float:
         self.model.eval()
         total_loss = 0.0
+
+        pbar = tqdm(self.test_loader, desc="[Evaluation]", leave=False)
         with torch.no_grad():
-            for x, y in self.test_loader:
+            for x, y in pbar:
                 x, y = x.to(self.device), y.to(self.device)
                 pred = self.model(x)
                 loss = self.criterion(pred, y)
                 total_loss += loss.item()
+
+                pbar.set_postfix(loss=loss.item())
 
         avg_loss = total_loss / len(self.test_loader)
 
