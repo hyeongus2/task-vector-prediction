@@ -3,7 +3,6 @@ import os
 import wandb
 from datetime import datetime
 
-
 def init_logger(config):
     log_dir = config.get("logging", {}).get("log_dir", "logs")
     os.makedirs(log_dir, exist_ok=True)
