@@ -176,7 +176,7 @@ def main():
     # 9. Train & evaluate
     logger.info("[6/6] Starting training loop...")
     trainer.train()
-    trainer.evaluate()
+    trainer.eval()
 
 
 if __name__ == "__main__":

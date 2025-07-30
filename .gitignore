@@ -2,6 +2,7 @@
 # Python
 # ---------------------
 __pycache__/
+.python_history
 *.egg-info/
 *.egg
 *.pkl
@@ -9,46 +10,73 @@ __pycache__/
 *.so
 
 # ---------------------
-# Environment / Cache / Checkpoint
+# Virtual Environments / IDE / Build
 # ---------------------
-.cache/
-.dotnet/
-.ipython/
-.jupyter/
-.local/
 .venv/
 .venv*/
 .vessl/
 .vscode/
 .vscode-server/
-.env
-.wget-hsts
+*.ckpt
+*.pt
+*.pth
+*.log
+*.tmp
 
 # ---------------------
-# Shell history / user profile
+# Python REPL / Jupyter / Shell history
 # ---------------------
+.bashrc
 .bash_history
 .bash_logout
-.bashrc
+.ipynb_checkpoints/
+.ipython/
+.jupyter/
 .lesshst
 .profile
 
 # ---------------------
-# Logs
+# System Cache & Local
+# ---------------------
+.cache/
+.dotnet/
+.env
+.local/
+.wget-hsts
+
+# ---------------------
+# Data / Checkpoints / Logs
 # ---------------------
 checkpoints/
 logs/
-*.log
+*.csv
+*.json
+*.npy
+*.npz
+*.tar.gz
+*.tsv
+*.zip
 
 # ---------------------
-# Security / Credentials / Personal Config
+# Dataset files (ignore all except .py)
+# ---------------------
+data/
+!data/**/*.py
+
+# ---------------------
+# Security / Personal Config
 # ---------------------
 .ssh/
 .gitconfig
+
+# ---------------------
+# OS-specific
+# ---------------------
+Thumbs.db
+.DS_Store
 
 # ---------------------
 # Ignore temporary/test files
 # ---------------------
 create_inits.py
 temp.*
-*.tmp

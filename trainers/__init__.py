@@ -1,18 +1,13 @@
 # trainers/__init__.py
 
-from .full_finetuning import FullFinetuneTrainer
-from .lora import LoRATrainer
-from .pretraining import PretrainTrainer
+from trainers.full_finetuning import FullFinetuneTrainer
+from trainers.lora import LoRATrainer
 
-
-def get_trainer(config, model, train_loader, val_loader, logger):
-    strategy = config["train"]["strategy"]
-
-    if strategy == "full_finetuning":
-        return FullFinetuneTrainer(config, model, train_loader, val_loader, logger)
-    elif strategy == "lora":
-        return LoRATrainer(config, model, train_loader, val_loader, logger)
-    elif strategy == "pretraining":
-        return PretrainTrainer(config, model, train_loader, val_loader, logger)
+def get_trainer(config, model, train_loader, test_loader, logger):
+    method = config["method"]
+    if method == "full":
+        return FullFinetuneTrainer(config, model, train_loader, test_loader, logger)
+    elif method == "lora":
+        return LoRATrainer(config, model, train_loader, test_loader, logger)
     else:
-        raise ValueError(f"[ERROR] Unsupported training strategy: {strategy}")
+        raise ValueError(f"Unknown method: {method}")

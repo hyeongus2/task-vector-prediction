@@ -16,12 +16,12 @@ def get_flat_params(model: nn.Module, only_require_grad: bool = False) -> torch.
         return torch.cat([p.detach().flatten() for p in model.parameters()])
 
 
-def get_flat_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch.Tensor, list[tuple[str, torch.Size, int, int]]]:
+def get_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch.Tensor, list[tuple[str, torch.Size, int, int]]]:
     """
-    Compute tau = θ_ft - θ_pre as a flattened 1D vector, along with metadata to reconstruct full parameter shapes.
+    Compute tau = theta_ft - theta_pre as a flattened 1D vector, along with metadata to reconstruct full parameter shapes.
 
     Returns:
-        flat_tau: Flattened 1D tau vector
+        tau: Flattened 1D tau vector
         meta: List of (name, shape, start_idx, end_idx) to reconstruct full tensor
     """
     flat_params = []
@@ -42,13 +42,13 @@ def get_flat_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch
         meta.append((name, param.shape, start_idx, end_idx))
         current_idx = end_idx
 
-    flat_tau = torch.cat(flat_params)
-    return flat_tau, meta
+    tau = torch.cat(flat_params)
+    return tau, meta
 
 
-def reconstruct_model(pretrained_state: OrderedDict, flat_tau: torch.Tensor, meta: list[tuple[str, torch.Size, int, int]]) -> OrderedDict:
+def reconstruct_model(pretrained_state: OrderedDict, tau: torch.Tensor, meta: list[tuple[str, torch.Size, int, int]]) -> OrderedDict:
     """
-    Reconstruct θ_ft = θ_pre + τ using flat tau vector and metadata.
+    Reconstruct theta_ft = theta_pre + tau using flat tau vector and metadata.
 
     Returns:
         new_state_dict: OrderedDict with reconstructed parameters
@@ -56,19 +56,19 @@ def reconstruct_model(pretrained_state: OrderedDict, flat_tau: torch.Tensor, met
     new_state_dict = pretrained_state.copy()
 
     for name, shape, start, end in meta:
-        tau_slice = flat_tau[start:end].view(shape)
+        tau_slice = tau[start:end].view(shape)
         new_state_dict[name] = pretrained_state[name] + tau_slice
 
     return new_state_dict
 
 
-def save_tau(flat_tau: torch.Tensor, meta: list[tuple[str, torch.Size, int, int]], epoch: int, tau_dir: str):
+def save_tau(tau: torch.Tensor, meta: list[tuple[str, torch.Size, int, int]], epoch: int, tau_dir: str):
     """
     Save tau vector and metadata to disk.
     """
     os.makedirs(tau_dir, exist_ok=True)
     torch.save({
-        'tau': flat_tau,
+        'tau': tau,
         'meta': meta,
     }, os.path.join(tau_dir, f"tau_epoch_{epoch:03d}.pt"))
 
