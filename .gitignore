@@ -12,6 +12,7 @@ __pycache__/
 # ---------------------
 # Virtual Environments / IDE / Build
 # ---------------------
+wandb/
 .netrc
 .venv/
 .venv*/
