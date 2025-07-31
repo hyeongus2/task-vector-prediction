@@ -29,6 +29,7 @@ wandb/
 # ---------------------
 # Python REPL / Jupyter / Shell history
 # ---------------------
+*.out
 .bashrc
 .bash_history
 .bash_logout

@@ -17,8 +17,8 @@ finetuning:
     momentum: 0.0
 
 early_stop:
-    enabled: true
-    patience: 5
+    enabled: false
+    patience: 
 
 save:
     enabled: true

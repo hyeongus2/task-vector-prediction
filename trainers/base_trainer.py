@@ -119,7 +119,7 @@ class BaseTrainer():
                     self.logger.info(f"Saved best model and corresponding tau_star at epoch {epoch+1}")
             else:
                 self.no_improve += 1
-                if self.no_improve >= self.patience:
+                if self.early_stop_enabled and self.no_improve >= self.patience:
                     self.logger.info("Early stopping triggered.")
                     break
 
