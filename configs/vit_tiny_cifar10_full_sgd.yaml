@@ -11,14 +11,14 @@ data:
 
 finetuning:
     method: full
-    epochs: 10
+    epochs: 20
     lr: 1.e-3
     optimizer: sgd
     momentum: 0.0
 
 early_stop:
     enabled: true
-    patience: 3
+    patience: 5
 
 save:
     enabled: true

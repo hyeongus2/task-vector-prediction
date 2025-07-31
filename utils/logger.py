@@ -57,7 +57,8 @@ def init_logger(config):
 
         def log_wandb(*, tau: torch.Tensor, step: int, mode: str, path: Optional[str] = None):
             tau_logger.log_tau_scalar(tau, step, mode)
-            tau_logger.log_tau_histogram(tau, step)
+            if config["logging"].get("log_tau_histogram", False):
+                tau_logger.log_tau_histogram(tau, step)
             if config["logging"].get("log_tau_table", False):
                 tau_logger.log_tau_table(tau, step)
             if config["logging"].get("log_tau_plot", False):

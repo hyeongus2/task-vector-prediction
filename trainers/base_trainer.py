@@ -9,7 +9,6 @@ from tqdm import tqdm
 from collections import OrderedDict
 from utils.seed import set_seed
 from utils.tau_utils import get_tau, save_tau
-from utils.tau_logger import log_tau_scalar
 
 class BaseTrainer():
     def __init__(self, config: dict, model: nn.Module, train_loader, test_loader, logger):
@@ -60,7 +59,10 @@ class BaseTrainer():
 
 
     def train(self):
-        step = 0
+        tau, _ = get_tau(self.model, self.pretrained_state)
+        self.logger.log_wandb(tau=torch.zeros_like(tau), step=0, mode="step", path=None)
+        self.logger.log_wandb(tau=torch.zeros_like(tau), step=0, mode="epoch", path=None)
+        step = 1
 
         for epoch in range(self.epochs):
             self.model.train()
@@ -101,7 +103,7 @@ class BaseTrainer():
             # Validation after every epoch
             val_loss = self.eval(epoch)
 
-            log_tau_scalar(tau=tau, step=step, mode="epoch")
+            self.logger.log_wandb(tau=tau, step=step, mode="epoch", path=None)
             self.logger.log_wandb_scalar({
                 "loss/train": train_loss,
                 "loss/val": val_loss,
