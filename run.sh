@@ -19,8 +19,8 @@ CONFIGS=(
     "configs/vit_tiny_mnist_full_adam.yaml"
     "configs/resnet18_cifar10_full_sgd.yaml"
     "configs/resnet18_cifar10_full_adam.yaml"
-    # "configs/resnet18_mnist_full_sgd.yaml"
-    # "configs/resnet18_mnist_full_adam.yaml"
+    "configs/resnet18_mnist_full_sgd.yaml"
+    "configs/resnet18_mnist_full_adam.yaml"
 )
 TASK="train.py"
 OVERRIDES=""  # e.g., "train.lr=0.01 train.batch_size=64"

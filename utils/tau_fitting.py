@@ -24,7 +24,12 @@ def fit_tau_curve_fit(t_steps: np.ndarray, tau_steps: np.ndarray) -> np.ndarray:
     for i in range(d):
         y = tau_steps[:, i]
         try:
-            popt, _ = curve_fit(exp_func, t_steps, y, bounds=(0, [np.inf, np.inf]), maxfev=5000)
+            popt, _ = curve_fit(
+                exp_func, t_steps, y,
+                bounds=([-np.inf, 0], [np.inf, np.inf]),    # a unrestricted, b ≥ 0
+                p0=[y[-1], 0.1],  # Initial value
+                maxfev=5000
+            )
             a, b = popt
             tau_pred[i] = a  # As t -> inf, tau -> a
         except RuntimeError:
@@ -42,7 +47,7 @@ class ExpFitter(torch.nn.Module):
         return self.a * (1 - torch.exp(-self.b * t))
 
 
-def fit_tau_torch(t_steps: np.ndarray, tau_steps: np.ndarray, num_iters: int = 500, lr: float = 0.01) -> np.ndarray:
+def fit_tau_torch(t_steps: np.ndarray, tau_steps: torch.Tensor, num_iters: int = 500, lr: float = 0.01) -> np.ndarray:
     """
     Fit tau values (k x d) to exponential function elementwise using PyTorch.
 

@@ -102,8 +102,8 @@ def analyze_tau_sequence(save_path: str, mode: str):
     # ===== Fit tau_pred and Compare =====
     print("\n[Compare] Predicting tau* via curve_fit and torch...")
 
-    tau_pred_curve = fit_tau_curve_fit(indices, taus.numpy())   # [d]
-    tau_pred_torch = fit_tau_torch(indices, taus.numpy())       # [d]
+    # tau_pred_curve = fit_tau_curve_fit(indices, taus.cpu().numpy())   # [d]
+    # tau_pred_torch = fit_tau_torch(indices, taus)       # [d]
 
     # Compare cosine similarity and L2 distance
     def compare(tau_pred, method_name):
@@ -119,8 +119,8 @@ def analyze_tau_sequence(save_path: str, mode: str):
         print(f"  ||tau_pred||       : {mag_pred:.4f}")
         print(f"  ||tau*||           : {mag_star:.4f}")
 
-    compare(tau_pred_curve, "curve_fit")
-    compare(tau_pred_torch, "torch_fit")
+    # compare(tau_pred_curve, "curve_fit")
+    # compare(tau_pred_torch, "torch_fit")
 
     print(f"\n[Done] Saved plots and tau_pred comparisons to: {tau_dir}")
 
@@ -134,8 +134,8 @@ def main():
     config["save"]["path"] = save_path
 
     # Analyze each available tau mode
-    if os.path.isdir(os.path.join(save_path, "tau_early")):
-        analyze_tau_sequence(save_path, mode="step")
+    # if os.path.isdir(os.path.join(save_path, "tau_early")):
+    #     analyze_tau_sequence(save_path, mode="step")
 
     if os.path.isdir(os.path.join(save_path, "tau_epoch")):
         analyze_tau_sequence(save_path, mode="epoch")
