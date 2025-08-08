@@ -1,8 +1,4 @@
 # models/mlp.py
-# This module defines a Multi-Layer Perceptron (MLP) model with customizable
-# architecture, activation functions, and dropout rates. It includes a function
-# to build the MLP from a configuration dictionary, allowing for easy model
-# instantiation and flexibility in design.
 
 import torch.nn as nn
 

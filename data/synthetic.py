@@ -1,5 +1,4 @@
-# datasets/regression/numeric/synthetic.py
-# This module generates synthetic data for numeric regression tasks.
+# data/synthetic.py
 
 import torch
 from torch.utils.data import Dataset

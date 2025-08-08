@@ -1,6 +1,4 @@
-# datasets/regression/numeric/tabular_loader.py
-# This module loads standard tabular datasets for numeric regression tasks
-# and returns torch Dataset objects with (X, y) pairs.
+# data/tabular.py
 
 import torch
 from torch.utils.data import Dataset

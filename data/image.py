@@ -1,6 +1,4 @@
 # data/image.py
-# This module provides raw torchvision image datasets (train/test) without transform.
-# The transform should be applied externally (e.g., in train.py) based on model input requirements.
 
 import torchvision.datasets as tv_datasets
 from torch.utils.data import Dataset

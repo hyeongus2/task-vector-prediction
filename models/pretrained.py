@@ -1,5 +1,4 @@
 # models/pretrained.py
-# This module loads a pretrained model and modifies its final layer based on the task.
 
 import torch.nn as nn
 from .model_utils import get_head_in_features, reset_head
