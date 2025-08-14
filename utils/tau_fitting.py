@@ -17,8 +17,8 @@ def fit_exp_vector(t_steps, tau_seq, num_iters=1000, lr=1e-1, device=None):
         device (str or None): 'cuda', 'cpu', or None to auto-detect
 
     Returns:
-        A_fit (Tensor): learned A (on CPU)
-        B_fit (Tensor): learned B (on CPU, positive)
+        A_fit (Tensor): learned A
+        B_fit (Tensor): learned B (positive)
     """
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -54,8 +54,8 @@ def fit_exp_vector(t_steps, tau_seq, num_iters=1000, lr=1e-1, device=None):
         loss.backward()
         optimizer.step()
 
-    A_fit = A.detach().cpu()
-    B_fit = torch.nn.functional.softplus(raw_B.detach()).cpu()
+    A_fit = A.detach()
+    B_fit = torch.nn.functional.softplus(raw_B.detach())
     # softplus(x) = (1 / beta) * log(1 + exp(beta * x)), default beta = 1
 
     return A_fit, B_fit
