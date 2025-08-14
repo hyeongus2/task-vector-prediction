@@ -1,7 +1,7 @@
 # models/pretrained.py
 
 import torch.nn as nn
-from .utils import get_head_in_features, reset_head
+from .model_utils import get_head_in_features, reset_head
 
 try:
     import torchvision.models as tv_models

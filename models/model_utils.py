@@ -1,4 +1,4 @@
-# models/utils.py
+# models/model_utils.py
 
 import torch.nn as nn
 

@@ -10,7 +10,7 @@ from torchvision import transforms
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 
 from models import build_model
-from models.utils import is_head_param  # single source of truth
+from models.model_utils import is_head_param  # single source of truth
 from data import get_datasets
 
 
