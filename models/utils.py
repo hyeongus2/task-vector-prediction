@@ -1,4 +1,4 @@
-# models/model_utils.py
+# models/utils.py
 
 import torch.nn as nn
 
@@ -6,14 +6,15 @@ __all__ = [
     "get_head",
     "reset_head",
     "get_head_in_features",
-    "get_lora_target_modules"
+    "get_lora_target_modules",
+    "HEAD_NAMES"
 ]
 
-HEAD_NAME = {'fc', 'classifier', 'head', 'dense'}
+HEAD_NAMES = {'fc', 'classifier', 'head', 'dense'}
 
 
 def get_head(model: nn.Module):
-    for attr in HEAD_NAME:
+    for attr in HEAD_NAMES:
         if hasattr(model, attr):
             return getattr(model, attr)
     if hasattr(model, 'get_classifier') and callable(model.get_classifier):
@@ -32,7 +33,7 @@ def get_head_in_features(model: nn.Module) -> int:
 
 
 def reset_head(model: nn.Module, new_head: nn.Module):
-    for attr in HEAD_NAME:
+    for attr in HEAD_NAMES:
         if hasattr(model, attr) and isinstance(getattr(model, attr), (nn.Linear, nn.Sequential)):
             setattr(model, attr, new_head)
             return
@@ -55,7 +56,7 @@ def get_lora_target_modules(model: nn.Module) -> list[str]:
         if isinstance(module, nn.Linear):
             # (e.g., 'encoder.layer.0.attention.self.query' → 'query')
             last_name = name.split('.')[-1]
-            if last_name in {'q', 'k', 'v', 'query', 'key', 'value'}.union(HEAD_NAME):
+            if last_name in {'q', 'k', 'v', 'query', 'key', 'value'}.union(HEAD_NAMES):
                 target_modules.append(last_name)
 
     # Deduplication

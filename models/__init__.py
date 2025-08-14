@@ -1,6 +1,6 @@
 # models/__init__.py
 
-from .model_utils import *
+from .utils import *
 from .mlp import build_mlp
 from .pretrained import load_pretrained_model
 import torch.nn as nn
