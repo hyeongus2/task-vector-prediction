@@ -26,3 +26,7 @@ save:
 logging:
     enabled: true
     use_wandb: true
+
+analyze:
+    modes: epoch
+    indices: 5

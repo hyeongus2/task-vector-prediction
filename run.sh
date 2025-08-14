@@ -23,13 +23,13 @@ mkdir -p logs
 # [3] Experiment configs
 CONFIGS=(
     "configs/vit_tiny_cifar10_full_sgd.yaml"
-    # "configs/vit_tiny_cifar10_full_adam.yaml"
-    # "configs/vit_tiny_mnist_full_sgd.yaml"
-    # "configs/vit_tiny_mnist_full_adam.yaml"
-    # "configs/resnet18_cifar10_full_sgd.yaml"
-    # "configs/resnet18_cifar10_full_adam.yaml"
-    # "configs/resnet18_mnist_full_sgd.yaml"
-    # "configs/resnet18_mnist_full_adam.yaml"
+    "configs/vit_tiny_cifar10_full_adam.yaml"
+    "configs/vit_tiny_mnist_full_sgd.yaml"
+    "configs/vit_tiny_mnist_full_adam.yaml"
+    "configs/resnet18_cifar10_full_sgd.yaml"
+    "configs/resnet18_cifar10_full_adam.yaml"
+    "configs/resnet18_mnist_full_sgd.yaml"
+    "configs/resnet18_mnist_full_adam.yaml"
 )
 TRAIN="train.py"
 ANALYZE="analyze.py"

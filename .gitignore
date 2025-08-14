@@ -46,6 +46,7 @@ wandb/
 .dotnet/
 .env
 .local/
+.nv/
 .wget-hsts
 
 # ---------------------
