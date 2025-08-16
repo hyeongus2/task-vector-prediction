@@ -6,7 +6,6 @@ import torch.nn as nn
 from collections import OrderedDict
 from typing import Optional
 
-
 def get_flat_params(model: nn.Module, only_require_grad: bool = False) -> torch.Tensor:
     """
     Returns a flattened 1D tensor of all model parameters.
@@ -47,7 +46,12 @@ def get_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch.Tens
         if param.shape != pretrained_state[name].shape:
             continue  # skip incompatible layers
 
-        delta = (param.detach() - pretrained_state[name].detach()).flatten()
+        # Ensure both tensors are on the same device before subtraction
+        pre = pretrained_state[name].detach()
+        if pre.device != param.device:
+            pre = pre.to(param.device)
+
+        delta = (param.detach() - pre).flatten()
         flat_params.append(delta)
 
         start_idx = current_idx
@@ -55,7 +59,7 @@ def get_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch.Tens
         meta.append((name, param.shape, start_idx, end_idx))
         current_idx = end_idx
 
-    tau = torch.cat(flat_params)
+    tau = torch.cat(flat_params) if flat_params else torch.empty(0, device=next(model.parameters()).device)
     return tau, meta
 
 
@@ -82,7 +86,10 @@ def save_tau(
         str: Full path where tau was saved.
     """
     assert mode in ["step", "epoch", "star"]
-    assert (step is not None) if mode == "step" else (epoch is not None)
+    if mode == "step":
+        assert step is not None, "step must be provided when mode='step'"
+    elif mode == "epoch":
+        assert epoch is not None, "epoch must be provided when mode='epoch'"
 
     subdir = {
         "step": "tau_early",
@@ -101,12 +108,29 @@ def save_tau(
         fname = f"tau_star.pt"
 
     path = os.path.join(save_dir, fname)
-
-    torch.save({"tau": tau, "meta": meta}, path)
+    torch.save({"tau": tau.detach().cpu(), "meta": meta}, path)
     return path
 
 
-def load_tau(tau_path: str) -> tuple[torch.Tensor, list[tuple[str, torch.Size, int, int]]]:
+def safe_torch_load(path: str, map_location: str | torch.device = "cpu"):
+    """
+    Safe-ish loader for PyTorch 2.6+ default (weights_only=True).
+    1) Try safe load (weights_only=True).
+    2) If that fails due to restricted globals, fall back to weights_only=False
+       (only do this if you trust the file - here we assume it's our own artifact).
+    """
+    try:
+        # Try safe mode first (PyTorch 2.6+)
+        return torch.load(path, map_location=map_location, weights_only=True)
+    except TypeError:
+        # PyTorch < 2.6: no weights_only arg
+        return torch.load(path, map_location=map_location)
+    except Exception:
+        # Trusted fallback: allow full unpickling if needed
+        return torch.load(path, map_location=map_location, weights_only=False)
+
+
+def load_tau(tau_path: str, device: Optional[str | torch.device] = None) -> tuple[torch.Tensor, list[tuple[str, torch.Size, int, int]]]:
     """
     Load tau and meta from file.
 
@@ -116,7 +140,16 @@ def load_tau(tau_path: str) -> tuple[torch.Tensor, list[tuple[str, torch.Size, i
     Returns:
         Tuple of tau and meta
     """
-    data = torch.load(tau_path)
+    # Resolve desired map_location
+    if device is None:
+        map_loc = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    else:
+        map_loc = torch.device(device) if isinstance(device, str) else device
+        # If user asked for CUDA but it's unavailable, fall back to CPU
+        if map_loc.type == 'cuda' and not torch.cuda.is_available():
+            map_loc = torch.device('cpu')
+
+    data = safe_torch_load(tau_path, map_location=map_loc)
     return data["tau"], data["meta"]
 
 
@@ -135,7 +168,15 @@ def reconstruct_model(pretrained_state: OrderedDict, tau: torch.Tensor, meta: li
     new_state = pretrained_state.copy()
     for name, shape, start, end in meta:
         delta = tau[start:end].view(shape)
-        new_state[name] = pretrained_state[name] + delta
+
+        # Match device and dtype of the target tensor to avoid mismatches
+        target = pretrained_state[name]
+        if delta.device != target.device:
+            delta = delta.to(target.device)
+        if delta.dtype != target.dtype:
+            delta = delta.to(dtype=target.dtype)
+
+        new_state[name] = target + delta
     return new_state
 
 

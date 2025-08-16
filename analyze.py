@@ -24,8 +24,8 @@ def main():
     logger = init_logger(config)
 
     # 4) Determine which modes to analyze
-    az_cfg = config.get("analyze", {})
-    modes = az_cfg.get("modes")
+    az = config.get("analyze", {})
+    modes = az.get("modes")
     if modes is None:
         modes = []
         if os.path.isdir(os.path.join(save_path, "tau_epoch")):

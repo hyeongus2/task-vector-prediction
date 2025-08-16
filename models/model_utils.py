@@ -7,10 +7,17 @@ __all__ = [
     "reset_head",
     "get_head_in_features",
     "get_lora_target_modules",
+    "is_head_param",
     "HEAD_NAMES"
 ]
 
 HEAD_NAMES = {'fc', 'classifier', 'head', 'dense'}
+
+
+def is_head_param(name: str) -> bool:
+    n = name.lower()
+    prefix = n.split('.', 1)[0]
+    return (prefix in HEAD_NAMES) or ("classifier" in n)
 
 
 def get_head(model: nn.Module):

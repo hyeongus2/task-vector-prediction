@@ -8,19 +8,12 @@ import os
 import re
 import torch
 import numpy as np
+from typing import Optional
 
-from utils.tau_utils import load_tau, tau_magnitude, tau_cosine_similarity
-from utils.tau_fitting import fit_exp_vector
-
-# Optional: two-exponential fit if available
-try:
-    from utils.tau_fitting import fit_exp2_vector
-    _HAS_EXP2 = True
-except Exception:
-    _HAS_EXP2 = False
-
+from utils.tau_utils import load_tau, tau_magnitude, tau_cosine_similarity, safe_torch_load
+from .tau_fitting import fit_exp_vector, fit_exp2_vector
 from analyzers.analyzer_utils import (
-    natural_sort, select_subset, build_cache_path, safe_torch_load, remove_pngs_recursive
+    natural_sort, select_subset, build_cache_path, remove_pngs_recursive
 )
 from analyzers.plots import *
 
@@ -38,7 +31,9 @@ def _cfg_for_mode(mode: str) -> tuple[str, str, str]:
             "epoch": ("tau_epoch", "tau_epoch_", "Epoch")}[mode]
 
 
-def _load_tau_series(save_path: str, subdir: str, prefix: str, logger):
+def _load_tau_series(
+    save_path: str, subdir: str, prefix: str, logger
+) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[str]]:
     """Load all tau_t tensors and their indices from save_path/subdir that match prefix."""
     tau_dir = os.path.join(save_path, subdir)
     if not os.path.isdir(tau_dir):
@@ -66,7 +61,7 @@ def _load_tau_series(save_path: str, subdir: str, prefix: str, logger):
         logger.warning(f"[Skip] No tau tensors parsed in {tau_dir}")
         return None, None, None
 
-    return torch.stack(taus), np.array(indices), tau_dir
+    return torch.stack(taus), torch.tensor(indices), tau_dir
 
 
 def _load_tau_star(save_path: str, logger):
@@ -80,7 +75,7 @@ def _load_tau_star(save_path: str, logger):
 
 
 def _fit_or_load_tau_pred(save_path: str, mode: str,
-                          indices: np.ndarray, taus: torch.Tensor,
+                          indices: torch.Tensor, taus: torch.Tensor,
                           predict_indices,
                           num_iters: int, lr: float, device: torch.device,
                           fit_type: str, logger):
@@ -91,7 +86,7 @@ def _fit_or_load_tau_pred(save_path: str, mode: str,
     cache_path = build_cache_path(save_path, mode, predict_indices, num_iters, lr)
     logger.info(f"[Cache] tau_pred path = {cache_path}")
 
-    A_fit = None; B_fit = None; extra = {}
+    B_fit = None; extra = {}
     tau_pred = None; obj = None
 
     if os.path.exists(cache_path):
@@ -111,30 +106,23 @@ def _fit_or_load_tau_pred(save_path: str, mode: str,
         sel_idx, sel_tau = select_subset(indices, taus, predict_indices)
         if len(sel_idx) < 2:
             logger.warning(f"[Skip] Not enough data points to fit (got {len(sel_idx)})")
-            return None, None, None, cache_path
+            return None, None, extra
 
         if fit_type == "exp2":
-            if not _HAS_EXP2:
-                logger.warning("[Fit] fit_exp2_vector not found; falling back to single-exp.")
-                A_fit, B_fit = fit_exp_vector(sel_idx, sel_tau, num_iters=num_iters, lr=lr)
-                tau_pred = A_fit.to(device)
-            else:
-                # Assume fit_exp2_vector returns (A1,B1,A2,B2); tau∞ = A1 + A2
-                A1, B1, A2, B2 = fit_exp2_vector(sel_idx, sel_tau, num_iters=num_iters, lr=lr)
-                tau_pred = (A1 + A2).to(device)
-                # For plotting quality, store an averaged B
-                B_fit = (B1 + B2).to(device) / 2.0
-                A_fit = tau_pred
-                extra = {"A1": A1.detach().cpu(), "B1": B1.detach().cpu(),
-                         "A2": A2.detach().cpu(), "B2": B2.detach().cpu()}
+            # Assume fit_exp2_vector returns (A1,B1,A2,B2); tau∞ = A1 + A2
+            A1, B1, A2, B2 = fit_exp2_vector(sel_idx, sel_tau, num_iters=num_iters, lr=lr)
+            tau_pred = (A1 + A2)
+            # For plotting quality, store an averaged B
+            B_fit = (B1 + B2) / 2.0
+            extra = {"A1": A1.detach().cpu(), "B1": B1.detach().cpu(),
+                     "A2": A2.detach().cpu(), "B2": B2.detach().cpu()}
         else:
-            A_fit, B_fit = fit_exp_vector(sel_idx, sel_tau, num_iters=num_iters, lr=lr)
-            tau_pred = A_fit.to(device)
+            tau_pred, B_fit = fit_exp_vector(sel_idx, sel_tau, num_iters=num_iters, lr=lr)
 
         torch.save({
             "tau_pred": tau_pred.detach().cpu(),
             "B_fit":    B_fit.detach().cpu() if B_fit is not None else None,
-            "indices_used": np.array(sel_idx),
+            "indices_used": sel_idx.detach().cpu(),
             "fit_params": {"num_iters": num_iters, "lr": lr, "fit_type": fit_type},
             "extra": extra
         }, cache_path)
@@ -142,11 +130,11 @@ def _fit_or_load_tau_pred(save_path: str, mode: str,
     else:
         logger.info("[Cache] tau_pred (and possibly B_fit) loaded.")
 
-    return tau_pred, B_fit, A_fit, cache_path
+    return tau_pred.to(device), B_fit.to(device), {k: v.to(device) for k, v in extra.items()}
 
 
 def run_one_mode(config: dict, mode: str, predict_indices, fit_num_iters: int, fit_lr: float,
-                 fit_type: str, cleanup_pngs: bool, wandb_upload_plots: bool, logger):
+                 fit_type: str, cleanup_pngs: bool, use_wandb: bool, logger):
     """Run full analysis for a single mode: load, fit/load cache, plot, and optional eval."""
     save_path = config["save"]["path"]
     subdir, prefix, label = _cfg_for_mode(mode)
@@ -167,10 +155,14 @@ def run_one_mode(config: dict, mode: str, predict_indices, fit_num_iters: int, f
     if tau_star is None:
         return
 
-    logger.info(f"[Info] Earliest ||tau||={float(tau_magnitude(taus[0])):.6f}, tau* ||tau||={float(tau_magnitude(tau_star)):.6f}")
+    logger.info(
+        f"[Info] Earliest ||tau||={float(tau_magnitude(taus[0])):.6f}, "
+        f"||tau_final||={float(tau_magnitude(taus[-1])):.6f}, "
+        f"||tau*||={float(tau_magnitude(tau_star)):.6f}"
+    )
 
     # Load or fit tau_pred (=A) and B
-    tau_pred, B_fit, A_fit, cache_path = _fit_or_load_tau_pred(
+    tau_pred, B_fit, _ = _fit_or_load_tau_pred(
         save_path, mode, indices, taus, predict_indices, fit_num_iters, fit_lr, device, fit_type, logger
     )
     if tau_pred is None:
@@ -211,7 +203,7 @@ def run_one_mode(config: dict, mode: str, predict_indices, fit_num_iters: int, f
     logger.info(f"[Done] Saved plots to: {tau_dir}")
 
     # Optional: upload figures to W&B
-    if wandb_upload_plots:
+    if use_wandb:
         try:
             import wandb
             imgs = [wandb.Image(p, caption=os.path.basename(p)) for p in paths if os.path.exists(p)]
@@ -249,13 +241,13 @@ def run_analysis(config: dict, modes: list[str], logger) -> None:
     """
     az = config.get("analyze", {})
     predict_indices    = az.get("indices", az.get("predict_indices", 5))
-    fit_num_iters      = int(az.get("num_iters", az.get("fit_num_iters", 1000)))
-    fit_lr             = float(az.get("lr", az.get("fit_lr", 0.1)))
-    fit_type           = str(az.get("fit_type", "exp")).lower()  # 'exp' | 'exp2'
-    cleanup_pngs       = bool(az.get("cleanup_pngs", False))
-    wandb_upload_plots = bool(az.get("wandb_upload_plots", False))
+    fit_num_iters      = az.get("num_iters", az.get("fit_num_iters", 1000))
+    fit_lr             = az.get("lr", az.get("fit_lr", 0.1))
+    fit_type           = az.get("fit_type", "exp").lower()  # 'exp' | 'exp2'
+    cleanup_pngs       = az.get("cleanup_pngs", False)
+    use_wandb = config["logging"].get("use_wandb", False)
 
     logger.info(f"[Analyze] predict_indices={predict_indices}, fit_num_iters={fit_num_iters}, fit_lr={fit_lr}, fit_type={fit_type}")
     for mode in modes:
         logger.info(f"\n===== Analyzing mode: {mode} =====")
-        run_one_mode(config, mode, predict_indices, fit_num_iters, fit_lr, fit_type, cleanup_pngs, wandb_upload_plots, logger)
+        run_one_mode(config, mode, predict_indices, fit_num_iters, fit_lr, fit_type, cleanup_pngs, use_wandb, logger)

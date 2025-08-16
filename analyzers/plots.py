@@ -7,7 +7,7 @@ import torch
 import numpy as np
 
 from utils.tau_utils import tau_magnitude, tau_cosine_similarity
-from analyzers.analyzer_utils import line_plot
+from .analyzer_utils import line_plot
 
 __all__ = [
     "plot_combo_magnitude",

@@ -10,7 +10,7 @@ import hashlib
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Optional
+from typing import Optional, Union
 
 # ---------- File / list helpers ----------
 
@@ -23,24 +23,65 @@ def natural_sort(file_list: list[str]) -> list[str]:
     return sorted(file_list, key=key)
 
 
-def select_subset(indices_np: np.ndarray, taus_t: torch.Tensor, predict_indices=None) -> tuple[np.ndarray, torch.Tensor]:
+def select_subset(
+    indices_in: Union[torch.Tensor, np.ndarray, list[int], tuple],
+    taus_t: torch.Tensor,
+    predict_indices: Optional[Union[int, torch.Tensor, np.ndarray, list[int], tuple]] = None
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Slice a subset (indices, taus) based on predict_indices:
-      - None  -> first 3
-      - int   -> first N
-      - list/tuple/ndarray -> explicit indices
+    Select a subset of rows from `taus_t` based on the provided index *values*.
+
+    Returns:
+      - sel_idx_t: 1D LongTensor on CPU with the selected index values (NOT positions)
+      - sel_taus : Tensor on the same device as `taus_t`, containing the selected rows
+
+    Behavior:
+      - predict_indices is None        -> take the first 3 entries
+      - predict_indices is int (N)     -> take the first N entries
+      - predict_indices is list/tuple/ndarray/tensor -> keep rows whose index value
+        (from `indices_in`) is in that set; preserves the original order of `indices_in`.
+
+    Raises:
+        ValueError: on shape mismatches, unsupported types, empty selection, or invalid counts.
+        
+    Notes:
+      - 'indices_in' is normalized to a CPU LongTensor of values.
+      - We build a boolean mask on CPU and move only the mask to `taus_t.device`
+        to index `taus_t`, keeping large tensors on their original device.
     """
+    # Normalize incoming index values to a 1D CPU LongTensor
+    indices_t = torch.as_tensor(indices_in, dtype=torch.long, device="cpu").view(-1)
+
+    # Simple slice cases
     if predict_indices is None:
-        return indices_np[:3], taus_t[:3]
+        pos = slice(0, 3)
+        sel_idx_t = indices_t[pos]     # CPU long
+        sel_taus  = taus_t[pos]        # same device as taus_t
+        return sel_idx_t, sel_taus
+
     if isinstance(predict_indices, int):
-        return indices_np[:predict_indices], taus_t[:predict_indices]
-    if isinstance(predict_indices, (list, tuple, np.ndarray)):
-        mask = np.isin(indices_np, np.array(predict_indices))
-        sel_idx = indices_np[mask]
-        mask_t = torch.from_numpy(mask).to(taus_t.device).bool()
-        sel_taus = taus_t[mask_t]
-        return sel_idx, sel_taus
-    raise ValueError("predict_indices must be int, list/tuple[int], ndarray, or None")
+        pos = slice(0, predict_indices)
+        sel_idx_t = indices_t[pos]
+        sel_taus  = taus_t[pos]
+        return sel_idx_t, sel_taus
+    
+    if not isinstance(predict_indices, (list, tuple, np.ndarray, torch.Tensor)):
+        raise ValueError(
+            "predict_indices must be one of: int | list[int] | tuple | np.ndarray | torch.Tensor | None"
+        )
+
+    # Explicit membership case
+    sel_vals = torch.as_tensor(predict_indices, dtype=torch.long, device="cpu").view(-1)
+
+    # Build CPU mask: torch.isin returns a bool tensor already (no .bool() needed)
+    mask_cpu = torch.isin(indices_t, sel_vals)        # dtype: torch.bool on CPU
+    sel_idx_t = indices_t[mask_cpu]                   # CPU long (selected values)
+
+    # Index taus_t with a mask on the same device as taus_t
+    mask_dev = mask_cpu.to(device=taus_t.device)      # still dtype: torch.bool
+    sel_taus = taus_t[mask_dev]                       # subset on taus_t.device
+
+    return sel_idx_t, sel_taus
 
 
 def _indices_tag(predict_indices) -> str:
@@ -78,18 +119,6 @@ def build_cache_path(save_path: str, mode: str, predict_indices, fit_num_iters: 
     short = hashlib.sha1(json.dumps(key, sort_keys=True).encode()).hexdigest()[:8]
     fname = f"tau_pred_{mode}_{tag}_it{fit_num_iters}_lr{lr_s}_{short}.pt"
     return os.path.join(save_path, fname)
-
-
-def safe_torch_load(path: str, map_location=None):
-    """
-    Robust torch.load that tolerates PyTorch 2.6+ `weights_only=True` default.
-    Falls back to a safe load if the first attempt fails.
-    """
-    try:
-        return torch.load(path, map_location=map_location, weights_only=False)
-    except TypeError:
-        # Older PyTorch versions do not accept weights_only
-        return torch.load(path, map_location=map_location)
 
 
 # ---------- Plotting ----------
