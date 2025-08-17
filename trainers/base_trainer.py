@@ -7,6 +7,8 @@ import torch.optim as optim
 import copy
 from tqdm import tqdm
 from collections import OrderedDict
+from typing import Optional
+
 from utils.seed import set_seed
 from utils.tau_utils import get_tau, save_tau
 
@@ -66,6 +68,8 @@ class BaseTrainer():
 
         for epoch in range(self.epochs):
             self.model.train()
+            correct = 0
+            n = 0
             total_loss = 0.0
 
             # tqdm wrapper for step progress bar
@@ -82,6 +86,11 @@ class BaseTrainer():
 
                 total_loss += loss.item()
 
+                if isinstance(self.criterion, nn.CrossEntropyLoss):
+                    pred = pred.argmax(dim=1)
+                    correct += (pred == y).sum().item()
+                    n += x.size(0)
+
                 # Save tau_t for some steps
                 if self.save_enabled and step < self.save_max and step % self.save_every == 0:
                     tau, meta = get_tau(self.model, self.pretrained_state)
@@ -92,7 +101,12 @@ class BaseTrainer():
                 # update tqdm progress bar with loss
                 pbar.set_postfix(loss=loss.item())
 
+            train_acc = None
             train_loss = total_loss / len(self.train_loader)
+
+            if isinstance(self.criterion, nn.CrossEntropyLoss) and n > 0:
+                train_acc = correct / n
+                self.logger.info(f"[Epoch {epoch+1}] Train Acc: {train_acc:.4f}")
             self.logger.info(f"[Epoch {epoch+1}] Train Loss: {train_loss:.4f}")
 
             # Save tau_t for every epoch
@@ -101,13 +115,21 @@ class BaseTrainer():
                 save_tau(tau, meta, epoch=epoch, mode="epoch", out_dir=self.save_path)
 
             # Validation after every epoch
-            val_loss = self.eval(epoch)
+            val_acc, val_loss = self.eval(epoch)
 
             self.logger.log_wandb(tau=tau, step=step, mode="epoch", path=None)
-            self.logger.log_wandb_scalar({
-                "loss/train": train_loss,
-                "loss/val": val_loss,
-            }, step=step)
+            if train_acc is not None and val_acc is not None:
+                self.logger.log_wandb_scalar({
+                    "acc/train": train_acc,
+                    "loss/train": train_loss,
+                    "acc/val": val_acc,
+                    "loss/val": val_loss,
+                }, step=step)
+            else:
+                self.logger.log_wandb_scalar({
+                    "loss/train": train_loss,
+                    "loss/val": val_loss,
+                }, step=step)
 
             # Early stopping check (based on val_loss)
             if val_loss + self.delta < self.best_loss:
@@ -124,8 +146,10 @@ class BaseTrainer():
                     break
 
 
-    def eval(self, epoch=None) -> float:
+    def eval(self, epoch=None) -> tuple[Optional[float], float]:
         self.model.eval()
+        correct = 0
+        n = 0
         total_loss = 0.0
 
         pbar = tqdm(self.test_loader, desc="[Evaluation]", leave=False)
@@ -136,16 +160,28 @@ class BaseTrainer():
                 loss = self.criterion(pred, y)
                 total_loss += loss.item()
 
+                if isinstance(self.criterion, nn.CrossEntropyLoss):
+                    pred = pred.argmax(dim=1)
+                    correct += (pred == y).sum().item()
+                    n += x.size(0)
+
                 pbar.set_postfix(loss=loss.item())
 
+        acc = None
         avg_loss = total_loss / len(self.test_loader)
 
         if epoch is not None:
+            if isinstance(self.criterion, nn.CrossEntropyLoss) and n > 0:
+                acc = correct / n
+                self.logger.info(f"[Epoch {epoch+1}] Validation Acc: {acc:.4f}")
             self.logger.info(f"[Epoch {epoch+1}] Validation Loss: {avg_loss:.4f}")
         else:
+            if isinstance(self.criterion, nn.CrossEntropyLoss) and n > 0:
+                acc = correct / n
+                self.logger.info(f"[Evaluation] Test Acc: {acc:.4f}")
             self.logger.info(f"[Evaluation] Test Loss: {avg_loss:.4f}")
 
-        return avg_loss
+        return acc, avg_loss
 
 
     def save_model(self, path=None, filename="best_model.pt"):

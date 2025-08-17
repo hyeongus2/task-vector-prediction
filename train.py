@@ -4,61 +4,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from models import build_model
+from models import build_model, get_input_size
 from data import get_datasets
 from trainers import get_trainer
 from utils.config_utils import parse_args, load_config, merge_config
 from utils.paths import get_save_path
 from utils.seed import set_seed
 from utils.logger import init_logger
-
-def get_input_size(model: nn.Module, config: dict) -> tuple:
-    """
-    Returns (Channels, Height, Width) of input that the model expects.
-    Works well for image-based models (e.g., CNN, ViT).
-    """
-    model_type = config['model']['type']    # One of {'image', 'text', 'tabular', 'synthetic'}
-
-    if model_type == 'image':
-        # Use timm-style config is available
-        if hasattr(model, 'default_cfg') and 'input_size' in model.default_cfg:
-            return model.default_cfg['input_size']  # e.g., (3, 224, 224)
-    
-        # Check first top-level child module
-        first_layer = next(model.children())
-        if isinstance(first_layer, nn.Conv2d):
-            return (first_layer.in_channels, 224, 224)  # Default to 224x224 for Conv2d layers
-        elif isinstance(first_layer, nn.Linear):
-            return (1, 1, first_layer.in_features)  # Linear layers expect 1D input
-
-        # Fallback
-        return (3, 224, 224)
-    
-
-    elif model_type == 'text':
-        return (512,)  # Default for text models (e.g., BERT, GPT) / max sequence length
-    
-
-    elif model_type == 'tabular':
-        first_layer = next(model.children())
-        if isinstance(first_layer, nn.Linear):
-            return (first_layer.in_features,)
-        elif isinstance(first_layer, nn.Sequential):
-            first_layer = next(first_layer.children())
-            if isinstance(first_layer, nn.Linear):
-                return (first_layer.in_features,)
-        else:
-            raise ValueError("Unsupported first layer type for tabular model")
-        
-    
-    elif model_type == 'synthetic':
-        return (1,)
-    
-
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-    return (0,)
-
 
 def main():
     # 1. Load config and overrides
