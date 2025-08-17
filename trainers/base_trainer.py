@@ -66,6 +66,8 @@ class BaseTrainer():
         self.logger.log_wandb(tau=torch.zeros_like(tau), step=0, mode="epoch", path=None)
         step = 1
 
+        last_epoch = -1
+
         for epoch in range(self.epochs):
             self.model.train()
             correct = 0
@@ -109,9 +111,10 @@ class BaseTrainer():
                 self.logger.info(f"[Epoch {epoch+1}] Train Acc: {train_acc:.4f}")
             self.logger.info(f"[Epoch {epoch+1}] Train Loss: {train_loss:.4f}")
 
+            tau, meta = get_tau(self.model, self.pretrained_state)
+
             # Save tau_t for every epoch
             if self.save_enabled:
-                tau, meta = get_tau(self.model, self.pretrained_state)
                 save_tau(tau, meta, epoch=epoch, mode="epoch", out_dir=self.save_path)
 
             # Validation after every epoch
@@ -136,14 +139,20 @@ class BaseTrainer():
                 self.best_loss = val_loss
                 self.no_improve = 0
                 if self.save_enabled:
-                    self.save_model()
+                    self.save_model(filename="best_model.pt")
                     save_tau(tau, meta, epoch=epoch, mode="star", out_dir=self.save_path)
                     self.logger.info(f"Saved best model and corresponding tau_star at epoch {epoch+1}")
             else:
                 self.no_improve += 1
                 if self.early_stop_enabled and self.no_improve >= self.patience:
                     self.logger.info("Early stopping triggered.")
+                    last_epoch = epoch
                     break
+
+            last_epoch = epoch
+
+        if self.save_enabled:
+            self.save_model(filename=f"last_model_epoch_{last_epoch+1:03d}.pt")
 
 
     def eval(self, epoch=None) -> tuple[Optional[float], float]:

@@ -16,13 +16,8 @@ from analyzers.analyzer_utils import (
     natural_sort, select_subset, build_cache_path, remove_pngs_recursive
 )
 from analyzers.plots import *
+from analyzers.eval_apply import eval_with_backbone_tau_using_trainer
 
-# Optional: evaluation pipeline (apply tau_pred to backbone and test)
-try:
-    from analyzers.eval_apply import eval_with_final_head_and_backbone_tau
-    _HAS_EVAL = True
-except Exception:
-    _HAS_EVAL = False
 
 
 def _cfg_for_mode(mode: str) -> tuple[str, str, str]:
@@ -134,8 +129,9 @@ def _fit_or_load_tau_pred(save_path: str, mode: str,
 
 
 def run_one_mode(config: dict, mode: str, predict_indices, fit_num_iters: int, fit_lr: float,
-                 fit_type: str, cleanup_pngs: bool, use_wandb: bool, logger):
+                 fit_type: str, cleanup_pngs: bool, logger):
     """Run full analysis for a single mode: load, fit/load cache, plot, and optional eval."""
+    use_wandb = config["logging"].get("use_wandb", False)
     save_path = config["save"]["path"]
     subdir, prefix, label = _cfg_for_mode(mode)
 
@@ -213,24 +209,21 @@ def run_one_mode(config: dict, mode: str, predict_indices, fit_num_iters: int, f
         except Exception as e:
             logger.warning(f"[W&B] Upload failed: {e}")
 
-    # Optional: evaluation — copy final head, add tau_pred to backbone, sweep alpha
-    eval_cfg = config.get("analyze", {}).get("eval", {})
-    if bool(eval_cfg.get("enable", False)) and _HAS_EVAL:
-        theta0_ckpt     = eval_cfg.get("theta0_ckpt")
-        final_head_ckpt = eval_cfg.get("final_head_ckpt")
-        alpha_grid      = eval_cfg.get("alpha_grid", [1.0])
-        if not theta0_ckpt or not final_head_ckpt:
-            logger.warning("[Eval] theta0_ckpt or final_head_ckpt not provided; skipping eval.")
-        else:
-            logger.info("[Eval] Running eval_with_final_head_and_backbone_tau ...")
-            eval_with_final_head_and_backbone_tau(
-                config=config,
-                tau_pred=tau_pred,
-                logger=logger,
-                theta0_ckpt=theta0_ckpt,
-                final_head_ckpt=final_head_ckpt,
-                alphas=alpha_grid,
-            )
+    # Copy final head, add tau_pred to backbone, sweep alpha
+    az = config.get("analyze", {})
+    alpha_grid        = az.get("alpha_grid", [0.25, 0.5, 0.75, 1.0])   # whatever you want
+    head_ckpts        = az.get("head_ckpts")                    # optional: list[str]
+    bn_recalc_batches = int(az.get("bn_recalc_batches", 100))
+
+    logger.info("[Eval] Running eval_with_backbone_tau_using_trainer ...")
+    eval_with_backbone_tau_using_trainer(
+        config=config,
+        tau_pred=tau_pred,
+        logger=logger,
+        alphas=alpha_grid,
+        head_ckpts=head_ckpts,
+        bn_recalc_batches=bn_recalc_batches
+    )
 
 
 def run_analysis(config: dict, modes: list[str], logger) -> None:
@@ -245,9 +238,8 @@ def run_analysis(config: dict, modes: list[str], logger) -> None:
     fit_lr             = az.get("lr", az.get("fit_lr", 0.1))
     fit_type           = az.get("fit_type", "exp").lower()  # 'exp' | 'exp2'
     cleanup_pngs       = az.get("cleanup_pngs", False)
-    use_wandb = config["logging"].get("use_wandb", False)
 
     logger.info(f"[Analyze] predict_indices={predict_indices}, fit_num_iters={fit_num_iters}, fit_lr={fit_lr}, fit_type={fit_type}")
     for mode in modes:
         logger.info(f"\n===== Analyzing mode: {mode} =====")
-        run_one_mode(config, mode, predict_indices, fit_num_iters, fit_lr, fit_type, cleanup_pngs, use_wandb, logger)
+        run_one_mode(config, mode, predict_indices, fit_num_iters, fit_lr, fit_type, cleanup_pngs, logger)

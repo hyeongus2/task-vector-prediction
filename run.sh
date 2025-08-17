@@ -38,41 +38,41 @@ OVERRIDES=""  # e.g., "train.lr=0.01 train.batch_size=64"
 MAX_PARALLEL=2
 CURRENT_PARALLEL=0
 
-# # [4] Launch training
-# for CONFIG_PATH in "${CONFIGS[@]}"; do
-#     CONFIG_NAME=$(basename "$CONFIG_PATH" .yaml)
-#     LOG_FILE="logs/${CONFIG_NAME}.log"
+# [4] Launch training
+for CONFIG_PATH in "${CONFIGS[@]}"; do
+    CONFIG_NAME=$(basename "$CONFIG_PATH" .yaml)
+    LOG_FILE="logs/${CONFIG_NAME}.log"
 
-#     echo ""
-#     echo "==============================="
-#     echo "Running: $CONFIG_NAME"
-#     echo "Log file: $LOG_FILE"
-#     echo "==============================="
+    echo ""
+    echo "==============================="
+    echo "Running: $CONFIG_NAME"
+    echo "Log file: $LOG_FILE"
+    echo "==============================="
 
-#     if [ -z "$OVERRIDES" ]; then
-#         CMD="python $TRAIN --config \"$CONFIG_PATH\""
-#     else
-#         CMD="python $TRAIN --config \"$CONFIG_PATH\" --overrides \"$OVERRIDES\""
-#     fi
+    if [ -z "$OVERRIDES" ]; then
+        CMD="python $TRAIN --config \"$CONFIG_PATH\""
+    else
+        CMD="python $TRAIN --config \"$CONFIG_PATH\" --overrides \"$OVERRIDES\""
+    fi
 
-#     if [[ "$MODE" == "background" ]]; then
-#         nohup bash -c "$CMD" > "$LOG_FILE" 2>&1 &
-#     else
-#         nohup bash -c "$CMD" > "$LOG_FILE" 2>&1
-#     fi
-#     echo "Started in ${MODE^^}"
+    if [[ "$MODE" == "background" ]]; then
+        nohup bash -c "$CMD" > "$LOG_FILE" 2>&1 &
+    else
+        nohup bash -c "$CMD" > "$LOG_FILE" 2>&1
+    fi
+    echo "Started in ${MODE^^}"
 
-#     ((CURRENT_PARALLEL++))
-#     if (( CURRENT_PARALLEL >= MAX_PARALLEL )); then
-#         wait
-#         CURRENT_PARALLEL=0
-#     fi
-# done
+    ((CURRENT_PARALLEL++))
+    if (( CURRENT_PARALLEL >= MAX_PARALLEL )); then
+        wait
+        CURRENT_PARALLEL=0
+    fi
+done
 
-# # [5] Wait for remaining jobs
-# wait
-# echo ""
-# echo "All training experiments completed."
+# [5] Wait for remaining jobs
+wait
+echo ""
+echo "All training experiments completed."
 
 # [6] Run analyze.py for each config
 for CONFIG_PATH in "${CONFIGS[@]}"; do

@@ -45,8 +45,8 @@ def main():
         in_channels = input_size[0]
         resize = input_size[1:]
 
-        transform_list = []
-        transform_list.append(transforms.Resize(resize))
+
+        transform_list = [transforms.Resize(resize)]
         if hasattr(train_dataset[0][0], 'mode') and train_dataset[0][0].mode == 'L' and in_channels == 3:
             transform_list.append(transforms.Grayscale(3))
         transform_list.append(transforms.ToTensor())

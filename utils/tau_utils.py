@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 from typing import Optional
+from models.model_utils import is_head_param
 
 def get_flat_params(model: nn.Module, only_require_grad: bool = False) -> torch.Tensor:
     """
@@ -23,13 +24,18 @@ def get_flat_params(model: nn.Module, only_require_grad: bool = False) -> torch.
         return torch.cat([p.detach().flatten() for p in model.parameters()])
 
 
-def get_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch.Tensor, list[tuple[str, torch.Size, int, int]]]:
+def get_tau(
+    model: nn.Module,
+    pretrained_state: OrderedDict,
+    exclude_head: bool = True
+) -> tuple[torch.Tensor, list[tuple[str, torch.Size, int, int]]]:
     """
     Compute tau = theta_ft - theta_pre as a flattened vector and record metadata.
 
     Args:
         model (nn.Module): Fine-tuned model.
         pretrained_state (OrderedDict): Pretrained model state dict.
+        exclude_head (bool): If exclude_head=True, parameters detected as head (via is_head_param) are skipped.
 
     Returns:
         Tuple of:
@@ -41,6 +47,11 @@ def get_tau(model: nn.Module, pretrained_state: OrderedDict) -> tuple[torch.Tens
     current_idx = 0
 
     for name, param in model.named_parameters():
+        # Skip head params if requested
+        if exclude_head and is_head_param(name):
+            continue
+
+        # Only compare overlapping params with matching shapes
         if name not in pretrained_state:
             continue
         if param.shape != pretrained_state[name].shape:
