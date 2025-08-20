@@ -2,24 +2,12 @@
 # Evaluate adding a predicted task vector (tau_pred) to the backbone only,
 # reusing BaseTrainer.eval() and applying backbone updates via reconstruct_model + saved meta.
 #
-# Pipeline:
-#   1) Build pretrained model (theta0) from config (no theta0 checkpoint required)
-#   2) Build test DataLoader aligned with training
-#   3) Create BaseTrainer(model, test_loader, logger) and reuse trainer.eval()
-#   4) Load meta from a saved tau file (prefer tau_star.pt)
-#   5) For each head checkpoint:
-#        - Load the checkpoint into a temp model, extract its head via get_head()
-#        - Reset model to pretrained state
-#        - reset_head() with that head module
-#        - Evaluate baseline (alpha=0)  → log to W&B (scalar + table row)
-#        - For each alpha:
-#             * Reset model to pretrained
-#             * Build new_state = reconstruct_model(pretrained_state, alpha * tau_pred, meta)
-#             * Load new_state (backbone updated)
-#             * reset_head() AGAIN to preserve the finetuned head
-#             * Optionally recalibrate BN (using test loader)
-#             * Run trainer.eval()        → log to W&B (scalar + table row)
-#   6) Report best (head, alpha) by accuracy (classification) or by lower loss (regression)
+# Changes vs previous:
+# - Deep-copy base state_dict to avoid reference entanglement
+# - Strict asserts on tau length vs meta
+# - Optional BN recalibration is applied consistently (baseline and alphas) only if enabled
+# - DeltaCheck: verifies (theta_new - theta0) matches alpha * tau (L2 ratio, cosine, max abs error)
+# - Extra validations and clearer logging
 
 import os
 import re
@@ -36,7 +24,6 @@ from data import get_datasets
 from trainers.base_trainer import BaseTrainer
 from utils.tau_utils import safe_torch_load, reconstruct_model
 
-
 # ---------------------------
 # Data loader aligned with training
 # ---------------------------
@@ -52,7 +39,6 @@ def build_eval_loader(config: dict, model: nn.Module, logger) -> DataLoader:
         resize = input_size[1:]
 
         tfm = [transforms.Resize(resize)]
-        # If dataset sample is grayscale but model expects 3 channels, expand it
         sample = test_dataset[0][0]
         if hasattr(sample, "mode") and sample.mode == "L" and in_channels == 3:
             tfm.append(transforms.Grayscale(3))
@@ -77,7 +63,6 @@ def build_eval_loader(config: dict, model: nn.Module, logger) -> DataLoader:
         num_workers=num_workers, pin_memory=pin_memory
     )
 
-
 # ---------------------------
 # Checkpoint & head helpers
 # ---------------------------
@@ -89,11 +74,10 @@ def _extract_state_dict(obj):
             if k in obj and isinstance(obj[k], dict):
                 return obj[k]
         if all(isinstance(v, torch.Tensor) for v in obj.values()):
-            return obj  # raw mapping of tensors
+            return obj
     elif isinstance(obj, nn.Module):
         return obj.state_dict()
     raise RuntimeError("Unsupported checkpoint format for state_dict extraction")
-
 
 def _score_filename_priority(fname: str) -> int:
     """Heuristic priority for head checkpoints: 'best' > 'last' > 'epochNNN' > 'stepNNN' > others."""
@@ -110,7 +94,6 @@ def _score_filename_priority(fname: str) -> int:
         return 10_000 + int(m.group(1))
     return 0
 
-
 def find_head_checkpoints(save_path: str) -> list[str]:
     """
     Recursively search for *.pt / *.pth under save_path (exclude tau_*.pt).
@@ -123,7 +106,7 @@ def find_head_checkpoints(save_path: str) -> list[str]:
         for f in files:
             if not (f.endswith(".pt") or f.endswith(".pth")):
                 continue
-            if f.startswith("tau_"):  # exclude tau snapshots
+            if f.startswith("tau_"):
                 continue
             full = os.path.join(root, f)
             pri = _score_filename_priority(f)
@@ -137,7 +120,6 @@ def find_head_checkpoints(save_path: str) -> list[str]:
     target.sort(key=lambda x: (x[0], x[1]), reverse=True)
     return [p for _, __, p in target]
 
-
 def load_head_module_from_ckpt(config: dict, ckpt_path: str, device: str, logger) -> nn.Module:
     """
     Build a temporary model of the same architecture, load checkpoint weights into it
@@ -147,13 +129,12 @@ def load_head_module_from_ckpt(config: dict, ckpt_path: str, device: str, logger
     obj = safe_torch_load(ckpt_path, map_location=device)
     sd = _extract_state_dict(obj)
 
-    # Newer PyTorch returns IncompatibleKeys; older versions return (missing, unexpected) tuple.
     incompatible = tmp.load_state_dict(sd, strict=False)
     try:
         missing = getattr(incompatible, "missing_keys", [])
         unexpected = getattr(incompatible, "unexpected_keys", [])
     except Exception:
-        missing, unexpected = incompatible  # tuple fallback
+        missing, unexpected = incompatible
 
     if missing or unexpected:
         logger.info(f"[Head] load_state_dict(strict=False): missing={len(missing)}, unexpected={len(unexpected)}")
@@ -161,46 +142,38 @@ def load_head_module_from_ckpt(config: dict, ckpt_path: str, device: str, logger
     head = copy.deepcopy(get_head(tmp)).to(device)
     return head
 
-
 # ---------------------------
-# Meta loader (from tau files)
+# Delta check helpers
 # ---------------------------
 
-def load_meta_for_reconstruct(save_path: str, logger):
-    """
-    Load `meta` from a saved tau file produced during training.
-    Preference: tau_star.pt → any tau_epoch_*.pt → any tau_step_*.pt
-    """
-    # 1) Try tau_star.pt
-    star = os.path.join(save_path, "tau_star.pt")
-    if os.path.exists(star):
-        obj = safe_torch_load(star, map_location="cpu")
-        if isinstance(obj, dict) and "meta" in obj:
-            logger.info("[Meta] Loaded meta from tau_star.pt")
-            return obj["meta"]
+def _flatten_by_meta(sd: dict[str, torch.Tensor], meta) -> torch.Tensor:
+    """Flatten parameters from state_dict in the order defined by meta."""
+    parts: list[torch.Tensor] = []
+    for name, shape, start, end in meta:
+        t = sd[name]
+        parts.append(t.reshape(-1).to(torch.float32).cpu())
+    return torch.cat(parts, dim=0) if parts else torch.zeros(0, dtype=torch.float32)
 
-    # 2) Fall back to tau_epoch
-    epoch_dir = os.path.join(save_path, "tau_epoch")
-    if os.path.isdir(epoch_dir):
-        for f in sorted(os.listdir(epoch_dir)):
-            if f.endswith(".pt"):
-                obj = safe_torch_load(os.path.join(epoch_dir, f), map_location="cpu")
-                if isinstance(obj, dict) and "meta" in obj:
-                    logger.info(f"[Meta] Loaded meta from {os.path.join(epoch_dir, f)}")
-                    return obj["meta"]
+def _delta_vs_tau_report(base_sd: dict[str, torch.Tensor],
+                         new_sd: dict[str, torch.Tensor],
+                         tau_vec: torch.Tensor,
+                         alpha: float,
+                         meta,
+                         logger) -> None:
+    """Compare (theta_new - theta0) vs alpha * tau over the backbone slice defined by meta."""
+    v0 = _flatten_by_meta(base_sd, meta)
+    v1 = _flatten_by_meta(new_sd, meta)
+    if v0.numel() == 0:
+        logger.warning("[DeltaCheck] Empty meta slice; nothing to compare.")
+        return
+    delta = v1 - v0
+    target = (alpha * tau_vec.to(torch.float32).cpu())
 
-    # 3) Fall back to tau_early (steps)
-    step_dir = os.path.join(save_path, "tau_early")
-    if os.path.isdir(step_dir):
-        for f in sorted(os.listdir(step_dir)):
-            if f.endswith(".pt"):
-                obj = safe_torch_load(os.path.join(step_dir, f), map_location="cpu")
-                if isinstance(obj, dict) and "meta" in obj:
-                    logger.info(f"[Meta] Loaded meta from {os.path.join(step_dir, f)}")
-                    return obj["meta"]
-
-    raise FileNotFoundError("Could not find any tau_*.pt from which to load meta.")
-
+    eps = 1e-12
+    l2_ratio = float(delta.norm() / (target.norm() + eps))
+    cos = float((delta @ target) / ((delta.norm() + eps) * (target.norm() + eps)))
+    max_abs = float((delta - target).abs().max())
+    logger.info(f"[DeltaCheck] alpha={alpha:.6f} | l2_ratio={l2_ratio:.6f}, cos={cos:.6f}, max_abs_err={max_abs:.3e}")
 
 # ---------------------------
 # BN recalibration
@@ -208,7 +181,9 @@ def load_meta_for_reconstruct(save_path: str, logger):
 
 @torch.no_grad()
 def recalibrate_bn(model: nn.Module, loader: DataLoader, device: str, num_batches: int = 100):
-    """Recompute BatchNorm running stats with a few forward passes. No-op if no BN layers."""
+    """Recompute BatchNorm running stats with a few forward passes. No-op if no BN layers or num_batches<=0."""
+    if not num_batches or num_batches <= 0:
+        return
     has_bn = any(isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.SyncBatchNorm)) for m in model.modules())
     if not has_bn:
         return
@@ -223,7 +198,6 @@ def recalibrate_bn(model: nn.Module, loader: DataLoader, device: str, num_batche
             break
     model.train(was_training)
 
-
 # ---------------------------
 # Public API (reconstruct_model path)
 # ---------------------------
@@ -234,12 +208,12 @@ def eval_with_backbone_tau_using_trainer(
     logger,
     alphas: Iterable[float] = (0.5, 1.0),
     head_ckpts: Optional[list[str]] = None,
-    bn_recalc_batches: int = 100,
+    bn_recalc_batches: int = 0,      # set >0 to enable BN recalibration; applied consistently to baseline and alphas
 ):
     """
     Evaluate by reconstructing backbone weights via reconstruct_model(pretrained_state, alpha*tau_pred, meta)
     and swapping in a finetuned head module extracted from each candidate checkpoint.
-    Also logs every trial to Weights & Biases (scalars + one final table) if enabled.
+    Logs every trial and emits DeltaCheck diagnostics.
     """
     use_wandb = config["logging"].get("use_wandb", False)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -261,36 +235,40 @@ def eval_with_backbone_tau_using_trainer(
             logger.warning("[Eval] No head checkpoints found; aborting.")
             return
 
-    # Cache pretrained state_dict to reset each time
-    base_sd = trainer.model.state_dict()
+    # Cache pretrained state_dict snapshot (deep copy!)
+    base_sd = copy.deepcopy(trainer.model.state_dict())
 
-    # Sanity check: tau length should match meta last end index
+    # Assert tau length matches meta
     try:
         last_end = max(end for _, _, _, end in meta)
-        if tau_pred.numel() != last_end:
-            logger.warning(f"[Eval] tau_pred length {tau_pred.numel()} != meta size {last_end}.")
-    except Exception:
-        pass
+    except Exception as e:
+        raise RuntimeError(f"[Eval] Invalid meta structure: {e}")
+
+    assert tau_pred.numel() == last_end, f"[Eval] tau_pred length {tau_pred.numel()} != meta size {last_end}"
+
+    # Norms for quick scale sense-check
+    tau_l2 = float(tau_pred.to(torch.float32).norm())
+    tau_inf = float(tau_pred.to(torch.float32).abs().max())
+    logger.info(f"[Tau] ||tau_pred||_2={tau_l2:.4e}, ||tau_pred||_inf={tau_inf:.4e}, len={tau_pred.numel()}")
 
     best = {"acc": None, "loss": float("inf"), "alpha": 0.0, "head": None}
     alphas = list(alphas)
 
-    # Prepare logging containers
-    grid_rows = []          # for a final wandb.Table
-    global_step = 0         # for streaming scalar logs
+    grid_rows = []
+    global_step = 0
 
     for h_idx, ckpt in enumerate(head_ckpts):
         try:
             # Build a head module from this checkpoint
             head_module = load_head_module_from_ckpt(config, ckpt, device, logger)
 
-            # Baseline (alpha=0): reset to theta0, set head, eval
+            # Baseline (alpha=0): reset to theta0, set head, optional BN recalib, eval
             trainer.model.load_state_dict(base_sd, strict=True)
             reset_head(trainer.model, head_module)
+            recalibrate_bn(trainer.model, trainer.test_loader, device, num_batches=bn_recalc_batches)
             base_acc, base_loss = trainer.eval(epoch=None)
             logger.info(f"[Eval] HEAD='{os.path.basename(ckpt)}' | alpha=0.0 → acc={base_acc}, loss={base_loss:.4f}")
 
-            # Stream scalars to W&B
             if use_wandb:
                 try:
                     logger.log_wandb_scalar({
@@ -301,14 +279,13 @@ def eval_with_backbone_tau_using_trainer(
                     }, step=global_step)
                 except Exception:
                     pass
-            # Save a table row
             grid_rows.append({
                 "head": os.path.basename(ckpt),
                 "alpha": 0.0,
                 "acc": float(-1.0 if base_acc is None else base_acc),
                 "loss": float(base_loss),
             })
-            # Update best
+
             better = False
             if base_acc is not None:
                 if best["acc"] is None or base_acc > best["acc"]:
@@ -328,20 +305,22 @@ def eval_with_backbone_tau_using_trainer(
                 # Reconstruct backbone state with alpha * tau_pred
                 new_sd = reconstruct_model(base_sd, a * tau_pred, meta)
 
+                # DeltaCheck to verify addition is correct
+                _delta_vs_tau_report(base_sd, new_sd, tau_pred, a, meta, logger)
+
                 # Load reconstructed state (strict=False to tolerate head mismatches)
                 trainer.model.load_state_dict(new_sd, strict=False)
 
                 # Restore this finetuned head
                 reset_head(trainer.model, head_module)
 
-                # Optionally recalibrate BN stats
+                # Optional BN recalibration (applied consistently)
                 recalibrate_bn(trainer.model, trainer.test_loader, device, num_batches=bn_recalc_batches)
 
                 # Eval
                 acc, loss = trainer.eval(epoch=None)
                 logger.info(f"[Eval] HEAD='{os.path.basename(ckpt)}' | alpha={a:.4f} → acc={acc}, loss={loss:.4f}")
 
-                # Stream scalars to W&B
                 if use_wandb:
                     try:
                         logger.log_wandb_scalar({
@@ -352,7 +331,6 @@ def eval_with_backbone_tau_using_trainer(
                         }, step=global_step)
                     except Exception:
                         pass
-                # Save a table row
                 grid_rows.append({
                     "head": os.path.basename(ckpt),
                     "alpha": float(a),
@@ -360,7 +338,6 @@ def eval_with_backbone_tau_using_trainer(
                     "loss": float(loss),
                 })
 
-                # Track best
                 better = False
                 if acc is not None:
                     if best["acc"] is None or acc > best["acc"]:
@@ -383,11 +360,12 @@ def eval_with_backbone_tau_using_trainer(
             f"→ acc={best['acc']}, loss={best['loss']:.4f}"
         )
         try:
-            logger.log_wandb_scalar(
-                {"eval/best_acc": -1.0 if best["acc"] is None else best["acc"],
-                 "eval/best_loss": best["loss"],
-                 "eval/best_alpha": best["alpha"]}
-            )
+            if use_wandb:
+                logger.log_wandb_scalar(
+                    {"eval/best_acc": -1.0 if best["acc"] is None else best["acc"],
+                     "eval/best_loss": best["loss"],
+                     "eval/best_alpha": best["alpha"]}
+                )
         except Exception:
             pass
     else:
@@ -396,10 +374,46 @@ def eval_with_backbone_tau_using_trainer(
     # Log the full grid as a W&B Table (one shot)
     if use_wandb and grid_rows:
         try:
-            import wandb  # will be initialized only if config.logging.use_wandb=True
+            import wandb
             table = wandb.Table(columns=["head", "alpha", "acc", "loss"])
             for r in grid_rows:
                 table.add_data(r["head"], r["alpha"], r["acc"], r["loss"])
             wandb.log({"eval/grid_table": table})
         except Exception as e:
             logger.warning(f"[W&B] Table log failed: {e}")
+
+# ---------------------------
+# Meta loader (from tau files)
+# ---------------------------
+
+def load_meta_for_reconstruct(save_path: str, logger):
+    """
+    Load `meta` from a saved tau file produced during training.
+    Preference: tau_star.pt → any tau_epoch_*.pt → any tau_step_*.pt
+    """
+    star = os.path.join(save_path, "tau_star.pt")
+    if os.path.exists(star):
+        obj = safe_torch_load(star, map_location="cpu")
+        if isinstance(obj, dict) and "meta" in obj:
+            logger.info("[Meta] Loaded meta from tau_star.pt")
+            return obj["meta"]
+
+    epoch_dir = os.path.join(save_path, "tau_epoch")
+    if os.path.isdir(epoch_dir):
+        for f in sorted(os.listdir(epoch_dir)):
+            if f.endswith(".pt"):
+                obj = safe_torch_load(os.path.join(epoch_dir, f), map_location="cpu")
+                if isinstance(obj, dict) and "meta" in obj:
+                    logger.info(f"[Meta] Loaded meta from {os.path.join(epoch_dir, f)}")
+                    return obj["meta"]
+
+    step_dir = os.path.join(save_path, "tau_early")
+    if os.path.isdir(step_dir):
+        for f in sorted(os.listdir(step_dir)):
+            if f.endswith(".pt"):
+                obj = safe_torch_load(os.path.join(step_dir, f), map_location="cpu")
+                if isinstance(obj, dict) and "meta" in obj:
+                    logger.info(f"[Meta] Loaded meta from {os.path.join(step_dir, f)}")
+                    return obj["meta"]
+
+    raise FileNotFoundError("Could not find any tau_*.pt from which to load meta.")

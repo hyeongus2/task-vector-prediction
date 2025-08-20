@@ -85,4 +85,4 @@ Thumbs.db
 # Ignore temporary/test files
 # ---------------------
 create_inits.py
-temp.*
+*temp*.*

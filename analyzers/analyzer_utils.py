@@ -49,6 +49,9 @@ def select_subset(
       - We build a boolean mask on CPU and move only the mask to `taus_t.device`
         to index `taus_t`, keeping large tensors on their original device.
     """
+    if taus_t.shape[0] == 0:
+        return torch.empty(0, dtype=torch.long), torch.empty_like(taus_t)
+
     # Normalize incoming index values to a 1D CPU LongTensor
     indices_t = torch.as_tensor(indices_in, dtype=torch.long, device="cpu").view(-1)
 
@@ -66,7 +69,7 @@ def select_subset(
         return sel_idx_t, sel_taus
     
     if not isinstance(predict_indices, (list, tuple, np.ndarray, torch.Tensor)):
-        raise ValueError(
+        raise TypeError(
             "predict_indices must be one of: int | list[int] | tuple | np.ndarray | torch.Tensor | None"
         )
 
@@ -77,10 +80,11 @@ def select_subset(
     mask_cpu = torch.isin(indices_t, sel_vals)        # dtype: torch.bool on CPU
     sel_idx_t = indices_t[mask_cpu]                   # CPU long (selected values)
 
-    # Index taus_t with a mask on the same device as taus_t
-    mask_dev = mask_cpu.to(device=taus_t.device)      # still dtype: torch.bool
-    sel_taus = taus_t[mask_dev]                       # subset on taus_t.device
+    if sel_idx_t.numel() == 0:
+        return sel_idx_t, torch.empty(0, *taus_t.shape[1:], device=taus_t.device, dtype=taus_t.dtype)
 
+    # Index taus_t with a mask on the same device as taus_t
+    sel_taus = taus_t[mask_cpu.to(device=taus_t.device)]
     return sel_idx_t, sel_taus
 
 
@@ -134,22 +138,31 @@ def line_plot(
     hlines: Optional[list[tuple[float, str, str, str]]] = None,  # (yval, label, color, linestyle)
 ):
     """Generic line plot with optional horizontal guide lines."""
-    plt.figure()
-    markers = ['o', 'x', 's', '^', 'd', 'v']
-    for i, (y, lab) in enumerate(zip(ys, labels)):
-        plt.plot(x, y, marker=markers[i % len(markers)], label=lab)
-    if hlines:
-        for yval, lab, color, ls in hlines:
-            plt.axhline(y=yval, linestyle=ls, color=color, label=lab)
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    os.makedirs(os.path.dirname(outpath), exist_ok=True)
-    plt.savefig(outpath)
-    plt.close()
+    fig = plt.figure()
+    try:
+        markers = ['o', 'x', 's', '^', 'd', 'v', 'p', '*', '+'] # 마커 추가
+        for i, (y, lab) in enumerate(zip(ys, labels)):
+            plt.plot(x, y, marker=markers[i % len(markers)], label=lab)
+        
+        if hlines:
+            for yval, lab, color, ls in hlines:
+                plt.axhline(y=yval, linestyle=ls, color=color, label=lab)
+        
+        plt.title(title)
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        
+        # Ensure the output directory exists
+        out_dir = os.path.dirname(outpath)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+            
+        plt.savefig(outpath)
+    finally:
+        plt.close(fig)
 
 
 # ---------- Cleanup ----------
@@ -159,12 +172,16 @@ def remove_pngs_recursive(root_dir: str) -> int:
     Delete all *.png files under `root_dir` recursively.
     Returns the number of deleted files.
     """
+    if not os.path.isdir(root_dir):
+        return 0
+        
     count = 0
-    for base, _, _ in os.walk(root_dir):
-        for p in glob.glob(os.path.join(base, "*.png")):
-            try:
-                os.remove(p)
-                count += 1
-            except Exception:
-                pass
+    # Search for all .png files in root_dir and its subdirectories
+    for p in glob.glob(os.path.join(root_dir, "**", "*.png"), recursive=True):
+        try:
+            os.remove(p)
+            count += 1
+        except OSError:
+            # e.g., permission error, file not found (if deleted by another process)
+            pass
     return count

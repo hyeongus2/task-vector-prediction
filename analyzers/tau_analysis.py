@@ -19,7 +19,6 @@ from analyzers.plots import *
 from analyzers.eval_apply import eval_with_backbone_tau_using_trainer
 
 
-
 def _cfg_for_mode(mode: str) -> tuple[str, str, str]:
     assert mode in {"step", "epoch"}
     return {"step": ("tau_early", "tau_step_", "Step"),
@@ -107,8 +106,9 @@ def _fit_or_load_tau_pred(save_path: str, mode: str,
             # Assume fit_exp2_vector returns (A1,B1,A2,B2); tau∞ = A1 + A2
             A1, B1, A2, B2 = fit_exp2_vector(sel_idx, sel_tau, num_iters=num_iters, lr=lr)
             tau_pred = (A1 + A2)
-            # For plotting quality, store an averaged B
-            B_fit = (B1 + B2) / 2.0
+            # B_fit is a heuristic for plotting a representative single-exponential curve.
+            # A weighted average by magnitude |A| could be an alternative.
+            B_fit = (B1.abs() * B1 + B2.abs() * B2) / (B1.abs() + B2.abs() + 1e-8)
             extra = {"A1": A1.detach().cpu(), "B1": B1.detach().cpu(),
                      "A2": A2.detach().cpu(), "B2": B2.detach().cpu()}
         else:
@@ -125,7 +125,8 @@ def _fit_or_load_tau_pred(save_path: str, mode: str,
     else:
         logger.info("[Cache] tau_pred (and possibly B_fit) loaded.")
 
-    return tau_pred.to(device), B_fit.to(device), {k: v.to(device) for k, v in extra.items()}
+    return tau_pred.to(device), B_fit.to(device) if B_fit is not None else None, \
+        {k: v.to(device) for k, v in extra.items()}
 
 
 def run_one_mode(config: dict, mode: str, predict_indices, fit_num_iters: int, fit_lr: float,
@@ -163,14 +164,22 @@ def run_one_mode(config: dict, mode: str, predict_indices, fit_num_iters: int, f
     )
     if tau_pred is None:
         return
-
-    # Predict tau_hat(t) for all t (if B is available)
+    
+        # Predict tau_hat(t) for all t
     if B_fit is None:
-        logger.warning("[Eval] B_fit is None — skipping tau_hat_t computation")
-        tau_hat_list = [taus[i] for i in range(len(indices))]  # placeholder to keep plotting code simple
+        logger.warning("[Eval] B_fit is None — skipping tau_hat_t computation, using observed taus for plots.")
+        tau_hat_list = None
     else:
-        t_tensor = torch.tensor(indices, dtype=torch.float32, device=device).view(-1, 1)
-        tau_hat = tau_pred * (1 - torch.exp(-B_fit * t_tensor))
+        t_tensor = indices.to(dtype=torch.float32, device=device)
+        # Shapes: t_tensor [T], B_fit [D], tau_pred [D]
+        # We need to compute A * (1 - exp(-B * t)) element-wise for each time t.
+        # Unsqueeze adds a dimension to make broadcasting explicit and safer.
+        # t_tensor -> [T, 1], B_fit -> [1, D], tau_pred -> [1, D]
+        t_tensor = t_tensor.unsqueeze(1)
+        B_fit_r = B_fit.unsqueeze(0)
+        tau_pred_r = tau_pred.unsqueeze(0)
+        
+        tau_hat = tau_pred_r * (1 - torch.exp(-B_fit_r * t_tensor)) # Result shape: [T, D]
         tau_hat_list = [tau_hat[i] for i in range(len(indices))]
 
     # Log summary vs tau* and tau_final

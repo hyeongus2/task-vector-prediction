@@ -5,6 +5,8 @@
 import os
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
+from typing import Optional, Callable
 
 from utils.tau_utils import tau_magnitude, tau_cosine_similarity
 from .analyzer_utils import line_plot
@@ -18,10 +20,17 @@ __all__ = [
     "plot_refs_pairwise"
 ]
 
+def _compute_timeseries_metric(
+    series: torch.Tensor, 
+    reference: torch.Tensor,
+    metric_fn: Callable[[torch.Tensor, torch.Tensor], float]
+) -> list[float]:
+    """Computes a metric between each vector in a series and a single reference vector."""
+    return [metric_fn(series[i], reference) for i in range(series.shape[0])]
 
 def plot_combo_magnitude(indices: np.ndarray,
                          taus: torch.Tensor,
-                         tau_hat_list: list[torch.Tensor],
+                         tau_hat_list: Optional[list[torch.Tensor]],
                          tau_star: torch.Tensor,
                          tau_pred: torch.Tensor,
                          label: str,
@@ -30,16 +39,24 @@ def plot_combo_magnitude(indices: np.ndarray,
     Plot magnitudes of tau_t and tau_hat_t.
     Add horizontal dashed lines for ||tau_star|| (red) and ||tau_pred|| (magenta).
     """
-    mags_true = [float(tau_magnitude(t)) for t in taus]
-    mags_hat  = [float(tau_magnitude(h)) for h in tau_hat_list]
-    mag_star  = float(tau_magnitude(tau_star))
-    mag_pred  = float(tau_magnitude(tau_pred))
+    mags_true = [tau_magnitude(t) for t in taus]
+    
+    ys = [mags_true]
+    y_labels = ["||tau_t|| (Observed)"]
+
+    if tau_hat_list is not None:
+        mags_hat = [tau_magnitude(h) for h in tau_hat_list]
+        ys.append(mags_hat)
+        y_labels.append("||tau_hat_t|| (Predicted)")
+
+    mag_star = tau_magnitude(tau_star)
+    mag_pred = tau_magnitude(tau_pred)
 
     out = os.path.join(out_dir, f"mag_combo_{label.lower()}.png")
-    line_plot(indices, [mags_true, mags_hat], ["||tau_t||", "||tau_hat_t||"],
-              f"Magnitude (tau_t vs tau_hat_t) over {label}s", label, "||tau||",
+    line_plot(indices, ys, y_labels,
+              f"Magnitude Trajectory over {label}s", label, "L2 Magnitude ||tau||",
               out, hlines=[(mag_star, "||tau*||", "r", "--"),
-                          (mag_pred, "||tau_pred||", "m", "--")])
+                           (mag_pred, "||tau_pred||", "m", "--")])
     return out
 
 
@@ -53,19 +70,19 @@ def plot_cos_obs_refs(indices: np.ndarray,
     """
     Cosine similarities of observed tau_t against references: tau*, tau_pred, tau_final.
     """
-    cos_obs_star  = [float(tau_cosine_similarity(taus[i], tau_star))   for i in range(len(indices))]
-    cos_obs_pred  = [float(tau_cosine_similarity(taus[i], tau_pred))   for i in range(len(indices))]
-    cos_obs_final = [float(tau_cosine_similarity(taus[i], tau_final))  for i in range(len(indices))]
+    cos_obs_star  = _compute_timeseries_metric(taus, tau_star, tau_cosine_similarity)
+    cos_obs_pred  = _compute_timeseries_metric(taus, tau_pred, tau_cosine_similarity)
+    cos_obs_final = _compute_timeseries_metric(taus, tau_final, tau_cosine_similarity)
 
     out = os.path.join(out_dir, f"cos_obs_refs_{label.lower()}.png")
     line_plot(indices, [cos_obs_star, cos_obs_pred, cos_obs_final],
               ["cos(tau_t, tau*)", "cos(tau_t, tau_pred)", "cos(tau_t, tau_final)"],
-              f"Cosine: tau_t vs references over {label}s", label, "Cosine Similarity", out)
+              f"Cosine Similarity: Observed tau_t vs References", f"{label} Index", "Cosine Similarity", out)
     return out
 
 
 def plot_cos_hat_refs(indices: np.ndarray,
-                      tau_hat_list: list[torch.Tensor],
+                      tau_hat_list: Optional[list[torch.Tensor]],
                       taus: torch.Tensor,
                       tau_star: torch.Tensor,
                       tau_pred: torch.Tensor,
@@ -73,18 +90,20 @@ def plot_cos_hat_refs(indices: np.ndarray,
                       label: str,
                       out_dir: str) -> str:
     """
-    Cosine similarities of predicted tau_hat_t against references: tau*, tau_pred, tau_final, and tau_t.
-    The last one (cos(tau_hat_t, tau_t)) is the fit residual direction similarity.
+    Cosine similarities of predicted tau_hat_t against references.
     """
-    cos_hat_star  = [float(tau_cosine_similarity(tau_hat_list[i], tau_star))   for i in range(len(indices))]
-    cos_hat_pred  = [float(tau_cosine_similarity(tau_hat_list[i], tau_pred))   for i in range(len(indices))]
-    cos_hat_final = [float(tau_cosine_similarity(tau_hat_list[i], tau_final))  for i in range(len(indices))]
-    cos_hat_obs   = [float(tau_cosine_similarity(tau_hat_list[i], taus[i]))    for i in range(len(indices))]
+    if tau_hat_list is None: return ""
+    tau_hats = torch.stack(tau_hat_list)
+
+    cos_hat_star  = _compute_timeseries_metric(tau_hats, tau_star, tau_cosine_similarity)
+    cos_hat_pred  = _compute_timeseries_metric(tau_hats, tau_pred, tau_cosine_similarity)
+    cos_hat_final = _compute_timeseries_metric(tau_hats, tau_final, tau_cosine_similarity)
+    cos_hat_obs   = _compute_timeseries_metric(tau_hats, taus, tau_cosine_similarity)
 
     out = os.path.join(out_dir, f"cos_hat_refs_{label.lower()}.png")
     line_plot(indices, [cos_hat_star, cos_hat_pred, cos_hat_final, cos_hat_obs],
               ["cos(tau_hat_t, tau*)", "cos(tau_hat_t, tau_pred)", "cos(tau_hat_t, tau_final)", "cos(tau_hat_t, tau_t)"],
-              f"Cosine: tau_hat_t vs references (incl. residual) over {label}s", label, "Cosine Similarity", out)
+              f"Cosine Similarity: Predicted tau_hat_t vs References", f"{label} Index", "Cosine Similarity", out)
     return out
 
 
@@ -96,21 +115,22 @@ def plot_l2_obs_refs(indices: np.ndarray,
                      label: str,
                      out_dir: str) -> str:
     """
-    L2 distances of observed tau_t to references: tau*, tau_pred, tau_final.
+    L2 distances of observed tau_t to references.
     """
-    l2_obs_star  = [float(torch.norm(taus[i] - tau_star).item())  for i in range(len(indices))]
-    l2_obs_pred  = [float(torch.norm(taus[i] - tau_pred).item())  for i in range(len(indices))]
-    l2_obs_final = [float(torch.norm(taus[i] - tau_final).item()) for i in range(len(indices))]
-
+    l2_dist = lambda a, b: torch.norm(a - b).item()
+    l2_obs_star  = _compute_timeseries_metric(taus, tau_star, l2_dist)
+    l2_obs_pred  = _compute_timeseries_metric(taus, tau_pred, l2_dist)
+    l2_obs_final = _compute_timeseries_metric(taus, tau_final, l2_dist)
+    
     out = os.path.join(out_dir, f"l2_obs_refs_{label.lower()}.png")
     line_plot(indices, [l2_obs_star, l2_obs_pred, l2_obs_final],
-              ["L2(tau_t - tau*)", "L2(tau_t - tau_pred)", "L2(tau_t - tau_final)"],
-              f"L2: tau_t vs references over {label}s", label, "L2 Distance", out)
+              ["L2(tau_t, tau*)", "L2(tau_t, tau_pred)", "L2(tau_t, tau_final)"],
+              f"L2 Distance: Observed tau_t vs References", f"{label} Index", "L2 Distance", out)
     return out
 
 
 def plot_l2_hat_refs(indices: np.ndarray,
-                     tau_hat_list: list[torch.Tensor],
+                     tau_hat_list: Optional[list[torch.Tensor]],
                      taus: torch.Tensor,
                      tau_star: torch.Tensor,
                      tau_pred: torch.Tensor,
@@ -118,18 +138,21 @@ def plot_l2_hat_refs(indices: np.ndarray,
                      label: str,
                      out_dir: str) -> str:
     """
-    L2 distances of predicted tau_hat_t to references: tau*, tau_pred, tau_final, and tau_t.
-    The last one (L2(tau_hat_t, tau_t)) is the fit residual magnitude.
+    L2 distances of predicted tau_hat_t to references.
     """
-    l2_hat_star  = [float(torch.norm(tau_hat_list[i] - tau_star).item())  for i in range(len(indices))]
-    l2_hat_pred  = [float(torch.norm(tau_hat_list[i] - tau_pred).item())  for i in range(len(indices))]
-    l2_hat_final = [float(torch.norm(tau_hat_list[i] - tau_final).item()) for i in range(len(indices))]
-    l2_hat_obs   = [float(torch.norm(tau_hat_list[i] - taus[i]).item())   for i in range(len(indices))]
+    if tau_hat_list is None: return ""
+    tau_hats = torch.stack(tau_hat_list)
 
+    l2_dist = lambda a, b: torch.norm(a - b).item()
+    l2_hat_star  = _compute_timeseries_metric(tau_hats, tau_star, l2_dist)
+    l2_hat_pred  = _compute_timeseries_metric(tau_hats, tau_pred, l2_dist)
+    l2_hat_final = _compute_timeseries_metric(tau_hats, tau_final, l2_dist)
+    l2_hat_obs   = _compute_timeseries_metric(tau_hats, taus, l2_dist)
+    
     out = os.path.join(out_dir, f"l2_hat_refs_{label.lower()}.png")
     line_plot(indices, [l2_hat_star, l2_hat_pred, l2_hat_final, l2_hat_obs],
-              ["L2(tau_hat_t - tau*)", "L2(tau_hat_t - tau_pred)", "L2(tau_hat_t - tau_final)", "L2(tau_hat_t - tau_t)"],
-              f"L2: tau_hat_t vs references (incl. residual) over {label}s", label, "L2 Distance", out)
+              ["L2(tau_hat_t, tau*)", "L2(tau_hat_t, tau_pred)", "L2(tau_hat_t, tau_final)", "L2(tau_hat_t, tau_t)"],
+              f"L2 Distance: Predicted tau_hat_t vs References", f"{label} Index", "L2 Distance", out)
     return out
 
 
@@ -142,7 +165,6 @@ def plot_refs_pairwise(tau_star: torch.Tensor,
     Simple bar summary of pairwise cosine and L2 among (tau_pred, tau_star, tau_final).
     Useful to check how close tau_pred(∞) is to tau_final and tau*.
     """
-    import matplotlib.pyplot as plt
 
     pairs = [("pred,star", tau_pred, tau_star),
              ("pred,final", tau_pred, tau_final),
