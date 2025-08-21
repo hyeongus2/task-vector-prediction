@@ -129,7 +129,7 @@ def load_tau(tau_path: str, device: Optional[str | torch.device] = None) -> tupl
 # Reconstruction (strict, buffer-safe)
 # ---------------------------
 
-def _validate_meta_against_state(pretrained_state: OrderedDict,
+def _validate_meta_against_state(pretrained_state: dict[str, torch.Tensor],
                                  meta: list[tuple[str, torch.Size, int, int]]) -> None:
     """
     Ensure every meta entry exists in state, has matching shape, and contiguous indices.
@@ -153,7 +153,7 @@ def _validate_meta_against_state(pretrained_state: OrderedDict,
             raise RuntimeError(f"Target tensor '{name}' is not floating type (dtype={tgt.dtype}).")
     # OK
 
-def reconstruct_model(pretrained_state: OrderedDict,
+def reconstruct_model(pretrained_state: dict[str, torch.Tensor],
                       tau: torch.Tensor,
                       meta: list[tuple[str, torch.Size, int, int]]) -> OrderedDict:
     """

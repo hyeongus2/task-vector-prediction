@@ -98,7 +98,7 @@ def plot_cos_hat_refs(indices: np.ndarray,
     cos_hat_star  = _compute_timeseries_metric(tau_hats, tau_star, tau_cosine_similarity)
     cos_hat_pred  = _compute_timeseries_metric(tau_hats, tau_pred, tau_cosine_similarity)
     cos_hat_final = _compute_timeseries_metric(tau_hats, tau_final, tau_cosine_similarity)
-    cos_hat_obs   = _compute_timeseries_metric(tau_hats, taus, tau_cosine_similarity)
+    cos_hat_obs   = [tau_cosine_similarity(tau_hats[i], taus[i]) for i in range(len(indices))]
 
     out = os.path.join(out_dir, f"cos_hat_refs_{label.lower()}.png")
     line_plot(indices, [cos_hat_star, cos_hat_pred, cos_hat_final, cos_hat_obs],
@@ -147,7 +147,7 @@ def plot_l2_hat_refs(indices: np.ndarray,
     l2_hat_star  = _compute_timeseries_metric(tau_hats, tau_star, l2_dist)
     l2_hat_pred  = _compute_timeseries_metric(tau_hats, tau_pred, l2_dist)
     l2_hat_final = _compute_timeseries_metric(tau_hats, tau_final, l2_dist)
-    l2_hat_obs   = _compute_timeseries_metric(tau_hats, taus, l2_dist)
+    l2_hat_obs   = [l2_dist(tau_hats[i], taus[i]) for i in range(len(indices))]
     
     out = os.path.join(out_dir, f"l2_hat_refs_{label.lower()}.png")
     line_plot(indices, [l2_hat_star, l2_hat_pred, l2_hat_final, l2_hat_obs],
