@@ -1,4 +1,5 @@
-# src/tvp/models.py
+# src/tvp/model.py
+
 import torch.nn as nn
 import open_clip
 from typing import Dict, Tuple, Callable

@@ -1,6 +1,7 @@
 # src/tvp/data.py
+
 import torchvision
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, random_split
 from typing import Callable, Optional, Dict, List
 
 __all__ = [
@@ -8,18 +9,9 @@ __all__ = [
     "VALID_DATASETS"
 ]
 
-# A list of supported dataset class names from torchvision.datasets
 VALID_DATASETS: List[str] = [
-    "CIFAR10",
-    "CIFAR100",
-    "EMNIST",
-    "EuroSAT",
-    "FashionMNIST",
-    "Flowers102",
-    "Food101",
-    "MNIST",
-    "OxfordIIITPet",
-    "SVHN"
+    "CIFAR10", "CIFAR100", "EMNIST", "EuroSAT", "FashionMNIST", 
+    "Flowers102", "Food101", "MNIST", "OxfordIIITPet", "SVHN"
 ]
 
 def get_dataset(
@@ -29,44 +21,48 @@ def get_dataset(
 ) -> Dataset:
     """
     Factory function for creating a torchvision dataset dynamically using getattr.
-    Applies the provided preprocessing pipeline.
+    Handles different constructor arguments and manual splitting for EuroSAT.
     """
     dataset_cfg = config["data"]
-    dataset_name_from_config = dataset_cfg["name"]
-    data_dir = dataset_cfg["path"]
+    dataset_name_lower = dataset_cfg["name"].lower()
+    data_dir = dataset_cfg.get("path", "data")
 
-    # Find the official, case-sensitive name for the dataset
-    official_name = None
+    dataset_name = None
     for valid_name in VALID_DATASETS:
-        if valid_name.lower() == dataset_name_from_config.lower():
-            official_name = valid_name
+        if valid_name.lower() == dataset_name_lower:
+            dataset_name = valid_name
             break
     
-    if not official_name:
-        raise ValueError(
-            f"Unsupported or unknown dataset: '{dataset_name_from_config}'. "
-            f"Supported datasets are: {VALID_DATASETS}"
-        )
+    if not dataset_name:
+        raise ValueError(f"Unsupported dataset: '{dataset_cfg['name']}'.")
 
     try:
-        # Dynamically get the dataset class from the torchvision.datasets module
-        dataset_class = getattr(torchvision.datasets, official_name)
+        dataset_class = getattr(torchvision.datasets, dataset_name)
     except AttributeError:
-        raise ImportError(f"Could not import '{official_name}' from torchvision.datasets.")
+        raise ImportError(f"Could not import '{dataset_name}' from torchvision.datasets.")
 
-    # --- Handle different constructor arguments for datasets ---
-    # Most datasets use `train=True/False`
-    dataset_args = {
-        "root": data_dir,
-        "download": True,
-        "transform": image_preprocess
-    }
+    # --- Handle different constructor arguments ---
+    dataset_args = {"root": data_dir, "download": True, "transform": image_preprocess}
     
-    # Some datasets like SVHN, OxfordIIITPet use `split='train'/'test'`
-    if official_name in ["SVHN", "OxfordIIITPet", "Flowers102", "Food101", "EuroSAT"]:
-        dataset_args["split"] = split
+    # Special case: EuroSAT needs manual splitting
+    if dataset_name == "EuroSAT":
+        full_dataset = dataset_class(**dataset_args)
+        # Define split ratio, e.g., 80% train, 20% validation
+        train_size = int(0.8 * len(full_dataset))
+        val_size = len(full_dataset) - train_size
+        train_set, val_set = random_split(full_dataset, [train_size, val_size])
+        return train_set if split == 'train' else val_set
+
+    # Datasets using the `split` argument
+    if dataset_name in ["SVHN", "OxfordIIITPet", "Flowers102", "Food101", "EMNIST"]:
+        # EMNIST requires a specific split type from config
+        if dataset_name == "EMNIST":
+            dataset_args["split"] = dataset_cfg.get("emnist_split", "byclass")
+        else:
+            dataset_args["split"] = split if split != 'val' else 'train' # Defaulting val to train for simplicity
+    
+    # Datasets using the `train` argument (default case)
     else:
         dataset_args["train"] = (split == 'train')
 
-    # Create an instance of the dataset class
     return dataset_class(**dataset_args)

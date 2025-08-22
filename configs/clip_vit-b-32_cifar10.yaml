@@ -3,7 +3,7 @@ model:
     pretrained: laion2b_s34b_b79k
 
 data:
-    name: CIFAR10
+    name: cifar10
     output_dim: 10
     batch_size: 128
 
