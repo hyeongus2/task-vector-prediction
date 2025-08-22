@@ -4,7 +4,6 @@ model:
 
 data:
     name: cifar10
-    output_dim: 10
     batch_size: 128
 
 finetuning:
