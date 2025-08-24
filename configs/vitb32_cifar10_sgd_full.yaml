@@ -1,23 +1,17 @@
 model:
-    name: resnet18
-    type: image
-    pretrained: true
+    name: vit-b-32
+    pretrained: laion2b_s34b_b79k
 
 data:
-    name: CIFAR10
-    task: classification
-    output_dim: 10
+    name: cifar10
     batch_size: 128
 
 finetuning:
     method: full
     epochs: 20
-    lr: 1.e-5
-    optimizer: adam
-
-early_stop:
-    enabled: false
-    patience: 6
+    lr: 1.e-3
+    optimizer: sgd
+    momentum: 0.0
 
 save:
     enabled: true
@@ -30,3 +24,4 @@ logging:
 analyze:
     modes: epoch
     indices: 5
+    alpha_grid: [0.001, 0.01, 0.1, 0.5, 1]

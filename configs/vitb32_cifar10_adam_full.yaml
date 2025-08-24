@@ -1,24 +1,17 @@
 model:
-    name: vit_tiny_patch16_224
-    type: image
-    pretrained: true
+    name: vit-b-32
+    pretrained: laion2b_s34b_b79k
 
 data:
-    name: CIFAR10
-    task: classification
-    output_dim: 10
+    name: cifar10
     batch_size: 128
 
 finetuning:
-    method: full
+    method: lora
+    optimizer: sgd
     epochs: 20
     lr: 1.e-3
-    optimizer: sgd
     momentum: 0.0
-
-early_stop:
-    enabled: false
-    patience: 
 
 save:
     enabled: true
