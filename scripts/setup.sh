@@ -60,14 +60,17 @@ python -m pip install --upgrade pip
 echo "Installing PyTorch for '$HARDWARE_TARGET'..."
 case "$HARDWARE_TARGET" in
     cuda)
-        python -m pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu121
+        echo "Installing PyTorch (CUDA 12.1 build)..."
+        python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
         ;;
     xpu)
-        python -m pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/xpu
+        echo "Installing PyTorch (Intel XPU build)..."
+        python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/xpu
         python -m pip install intel-extension-for-pytorch
         ;;
     cpu|*)
-        python -m pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+        echo "Installing PyTorch (CPU build)..."
+        python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         ;;
 esac
 
@@ -75,7 +78,8 @@ echo "Installing remaining packages from requirements.txt..."
 if [ -f "requirements.txt" ]; then
     python -m pip install -r requirements.txt
 else
-    echo "Warning: requirements.txt not found. Skipping common packages."
+    echo "Warning: requirements.txt not found. Installing core ML packages..."
+    python -m pip install transformers datasets peft accelerate safetensors numpy pandas matplotlib pillow tqdm pyyaml wandb
 fi
 
 # --- 4. Done ---

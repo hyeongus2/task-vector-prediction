@@ -21,7 +21,7 @@ data:
 finetuning:
     method: lora
     optimizer: sgd
-    epochs: 30
+    epochs: 40
     lr: 1.e-2
     momentum: 0.9
 

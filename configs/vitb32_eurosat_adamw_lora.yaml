@@ -21,7 +21,7 @@ data:
 finetuning:
     method: lora
     optimizer: adamw
-    epochs: 15
+    epochs: 20
     lr: 1.e-4
     momentum: 0.0
 

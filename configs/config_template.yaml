@@ -20,9 +20,9 @@ data:
 # Finetuning settings (kept the same for a direct comparison)
 finetuning:
     method: lora
-    optimizer: sgd
-    epochs: 60
-    lr: 1.0
+    optimizer: adamw
+    epochs: 15
+    lr: 1.e-4
     momentum: 0.0
 
     # LoRA settings
@@ -36,8 +36,8 @@ finetuning:
 # Analysis & Save settings
 analysis:
     save_tau_every_n_steps: 50
-    num_monitoring_elements: 20 # For trainer
-    num_analysis_elements: 50 # For analyzer
+    num_monitoring_elements: 20  # For trainer
+    num_analysis_elements: 50  # For analyzer
 
 # Logging settings
 logging:

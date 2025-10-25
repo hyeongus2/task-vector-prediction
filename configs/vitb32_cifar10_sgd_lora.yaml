@@ -10,39 +10,34 @@ data:
     image_column_name: img
     label_column_name: label
 
-    # 'pre_split' for cifar10, 'auto_split' for others
+    # CIFAR-10 has predefined splits, so no need for auto-splitting.
     split_strategy: pre_split
-
-    # Only used when split_strategy is 'auto_split'
-    validation_split_size: 0.2
+    validation_split_size: 0.2  # Use 20% of the data for validation
 
     batch_size: 256
     num_workers: 4
 
-# Finetuning settings
+# Finetuning settings (kept the same for a direct comparison)
 finetuning:
     method: lora
     optimizer: sgd
-    epochs: 20
-    lr: 1.e-2
+    epochs: 60
+    lr: 1.0
     momentum: 0.0
 
     # LoRA settings
     lora:
-        r: 16  # Rank of the LoRA matrices. A common values are 4, 8, or 16.
-        lora_alpha: 32 # A scaling factor, often 2*r
-        target_modules: [q_proj, v_proj] # Apply LoRA to attention layers
+        r: 16
+        lora_alpha: 32
+        target_modules: [q_proj, v_proj]
         lora_dropout: 0.0
-        bias: none # 'none', 'all', or 'lora_only'
+        bias: none
 
 # Analysis & Save settings
 analysis:
-    # How often to save the tau vector (in steps). This is used by trainer.py
-    save_tau_every_n_steps: 100
-
-    num_monitoring_elements: 20 # Number of tau elements to track in wandb
-    num_fitting_points: [4, 6, 8] 
-    interpolation_alphas: [0.001, 0.01, 0.1, 0.25, 0.5, 0.75, 1]
+    save_tau_every_n_steps: 50
+    num_monitoring_elements: 20 # For trainer
+    num_analysis_elements: 50 # For analyzer
 
 # Logging settings
 logging:

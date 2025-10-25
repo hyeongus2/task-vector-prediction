@@ -2,7 +2,7 @@
 seed: 42
 
 # Model settings
-model_id: openai/clip-vit-base-patch32
+model_id: openai/clip-vit-large-patch14
 
 # Data settings
 data:
@@ -20,15 +20,15 @@ data:
 # Finetuning settings (kept the same for a direct comparison)
 finetuning:
     method: lora
-    optimizer: sgd
-    epochs: 60
-    lr: 1.0
+    optimizer: adamw
+    epochs: 20
+    lr: 1.e-4
     momentum: 0.0
 
     # LoRA settings
     lora:
-        r: 16
-        lora_alpha: 32
+        r: 32
+        lora_alpha: 64
         target_modules: [q_proj, v_proj]
         lora_dropout: 0.0
         bias: none
@@ -36,8 +36,8 @@ finetuning:
 # Analysis & Save settings
 analysis:
     save_tau_every_n_steps: 50
-    num_monitoring_elements: 20 # For trainer
-    num_analysis_elements: 50 # For analyzer
+    num_monitoring_elements: 20  # For trainer
+    num_analysis_elements: 50  # For analyzer
 
 # Logging settings
 logging:

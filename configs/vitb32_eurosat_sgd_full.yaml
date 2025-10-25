@@ -19,7 +19,7 @@ data:
 
 # Finetuning settings (kept the same for a direct comparison)
 finetuning:
-    method: lora
+    method: full
     optimizer: sgd
     epochs: 60
     lr: 1.0
