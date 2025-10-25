@@ -1,64 +1,63 @@
 # analyze.py
-# Thin entry point that loads config, initializes the logger, determines modes,
-# and delegates to analyzers.tau_analysis.run_analysis.
+import argparse
+from pathlib import Path
+import yaml
+import logging
+from src.tvp.analyzer import analyze
+from src.tvp.utils import set_seed
 
-import os
-from typing import Any, Optional
+# It's good practice to have a logger, even in the entrypoint script.
+logger = logging.getLogger(__name__)
 
-from utils.config_utils import parse_args, load_config, merge_config
-from utils.paths import get_save_path
-from utils.logger import init_logger
-from analyzers.tau_analysis import run_analysis
+# Try to import IPEX, warn if not available
+try:
+    import intel_extension_for_pytorch as ipex
+except ImportError:
+    logger.warning("Intel Extension for PyTorch (IPEX) not found. XPU device will not be available.")
+    pass
 
-VALID_MODES = {"epoch", "step"}
-TAU_EPOCH_DIR = "tau_epoch"
-TAU_EARLY_DIR = "tau_early"
 
 def main():
-    # 1) Load config and CLI overrides
-    config_path, override_dict = parse_args()
-    config = load_config(config_path)
-    config = merge_config(config, override_dict)
+    """
+    Entrypoint for the analysis script.
+    This function handles command-line argument parsing, loads the experiment
+    config, and then calls the main analysis engine.
+    """
+    parser = argparse.ArgumentParser(description="Run an analysis of a completed training run.")
+    
+    # Required arguments
+    parser.add_argument("--exp_dir", type=str, required=True, help="Path to the experiment output directory.")
+    
+    # Arguments for the analysis itself
+    parser.add_argument(
+        "--prediction_space", 
+        type=str, 
+        choices=['adapter', 'operational'], 
+        default='adapter', 
+        help="The space in which to predict the trajectory ('adapter' or 'operational'). Defaults to 'adapter'."
+    )
+    parser.add_argument("--k", type=int, default=3, help="Number of exponential terms (k) for the trajectory model.")
+    parser.add_argument("--N", type=int, default=6, help="Number of early data points (N) to use for fitting.")
+    
+    args = parser.parse_args()
 
-    # 2) Resolve save path and keep it in config for consistency/logging
-    save_path = config["save"].get("path", get_save_path(config_path=config_path, overrides=override_dict))
-    config["save"]["path"] = save_path
-
-    # 3) Initialize logger (wandb + file + console)
-    logger = init_logger(config)
+    if args.N <= args.k:
+        logger.error(f"Number of data points (N={args.N}) must be greater than k={args.k} for fitting."); return
 
     try:
-        # 4) Determine which modes to analyze
-        az_config: dict[str, Any] = config.get("analyze", {})
-        modes: Optional[list[str]] = az_config.get("modes")
+        # Load the configuration file from the experiment directory
+        config_path = Path(args.exp_dir) / "effective_config.yaml"
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        logger.error(f"Config file not found at: {config_path}")
+        logger.error("Please ensure the --exp_dir argument points to a valid experiment output directory.")
+        return
 
-        if modes is None:
-            # Auto-detect modes if not specified in config
-            modes = []
-            if os.path.isdir(os.path.join(save_path, TAU_EPOCH_DIR)):
-                modes.append("epoch")
-            if os.path.isdir(os.path.join(save_path, TAU_EARLY_DIR)):
-                modes.append("step")
-        else:
-            # Ensure modes from config are valid
-            if isinstance(modes, str):
-                modes = [modes]
-            # Filter the list to only include valid, known modes
-            modes = [m for m in modes if m in VALID_MODES]
+    set_seed(config.get('seed', 42))
 
-        if not modes:
-            logger.warning(f"[Skip] No analyzable directories found in {save_path}. Searched for: {TAU_EPOCH_DIR}, {TAU_EARLY_DIR}. Exiting.")
-            return
-
-        logger.info(f"[Analyze] save_path='{save_path}' modes={modes}")
-
-        # 5) Run analysis
-        run_analysis(config, modes, logger)
-
-    finally:
-        # 6) Finish
-        if logger:
-            logger.finish_wandb()
+    # Call the main analysis engine, passing both args and config
+    analyze(args=args, config=config)
 
 
 if __name__ == "__main__":

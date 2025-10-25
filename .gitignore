@@ -54,6 +54,7 @@ wandb/
 # ---------------------
 checkpoints/
 logs/
+outputs/
 *.csv
 *.json
 *.npy
@@ -85,4 +86,7 @@ Thumbs.db
 # Ignore temporary/test files
 # ---------------------
 create_inits.py
-*temp*.*
+*temp.*
+*temp_*.*
+_*.py
+!__*.py

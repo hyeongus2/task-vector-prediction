@@ -1,0 +1,45 @@
+# Basic settings
+seed: 42
+
+# Model settings
+model_id: openai/clip-vit-base-patch32
+
+# Data settings
+data:
+    name: tanganke/eurosat
+    image_column_name: image  # Changed from 'img' to 'image' for EuroSAT
+    label_column_name: label
+
+    # EuroSAT only has a 'train' split, so we need to create a validation set automatically.
+    split_strategy: auto_split
+    validation_split_size: 0.2  # Use 20% of the data for validation
+
+    batch_size: 256
+    num_workers: 4
+
+# Finetuning settings (kept the same for a direct comparison)
+finetuning:
+    method: lora
+    optimizer: sgd
+    epochs: 50
+    lr: 1.e-2
+    momentum: 0.0
+
+    # LoRA settings
+    lora:
+        r: 16
+        lora_alpha: 32
+        target_modules: [q_proj, v_proj]
+        lora_dropout: 0.0
+        bias: none
+
+# Analysis & Save settings
+analysis:
+    save_tau_every_n_steps: 50
+    num_monitoring_elements: 20 # For trainer
+    num_analysis_elements: 50 # For analyzer
+
+# Logging settings
+logging:
+    enabled: true
+    wandb: true

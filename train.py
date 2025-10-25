@@ -1,98 +1,105 @@
 # train.py
+import yaml
+import argparse
+from pathlib import Path
+from typing import Any
+import logging
+from src.tvp.trainer import train
+from src.tvp.utils import set_seed
 
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from models import build_model, get_input_size
-from data import get_datasets
-from trainers import get_trainer
-from utils.config_utils import parse_args, load_config, merge_config
-from utils.paths import get_save_path
-from utils.seed import set_seed
-from utils.logger import init_logger
+# Create a logger for this module
+logger = logging.getLogger(__name__)
+
+# Try to import IPEX, warn if not available
+try:
+    import intel_extension_for_pytorch as ipex
+except ImportError:
+    logger.warning("Intel Extension for PyTorch (IPEX) not found. XPU device will not be available.")
+    pass
+
+
+def set_nested_key(d: dict, key_string: str, value: Any):
+    """
+    Helper function to set a value in a nested dictionary using a dot-separated key.
+    e.g., set_nested_key(config, "finetuning.lr", 0.01)
+    """
+    keys = key_string.split('.')
+    current_level = d
+    for key in keys[:-1]:
+        # Create nested dictionaries if they don't exist
+        current_level = current_level.setdefault(key, {})
+    current_level[keys[-1]] = value
+
 
 def main():
-    # 1. Load config and overrides
-    config_path, override_dict = parse_args()
-    config = load_config(config_path)
-    config = merge_config(config, override_dict)
+    """
+    Main function to run the training process.
+    Parses command-line arguments, loads and overrides config, and calls the trainer.
+    """
+    # 1. Setup argument parser to accept a config file path and optional overrides
+    parser = argparse.ArgumentParser(description="Run a finetuning experiment for Task Vector Prediction.")
+    parser.add_argument("--config", type=str, required=True, help="Path to the configuration YAML file.")
+    parser.add_argument("--resume_id", type=str, help="Wandb run ID to resume a stopped training run.")
+    
+    # A generic override argument that can be used multiple times.
+    parser.add_argument(
+        "--set",
+        dest="config_overrides",
+        metavar="KEY=VALUE",
+        nargs='+',
+        action='append',
+        help="Set a configuration value from the command line, e.g., --set data.batch_size=128 finetuning.lr=0.01"
+    )
+    
+    args = parser.parse_args()
 
-    # Add save path to config
-    save_path = config["save"].get("path", get_save_path(config_path=config_path, overrides=override_dict))
-    config["save"]["path"] = save_path
+    # 2. Load the base configuration from the specified YAML file
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
 
-    # 2. Set seed
-    set_seed(config.get("seed", 42))
+    set_seed(config.get('seed', 42))
 
-    # 3. Initialize logger (wandb + file + console)
-    logger = init_logger(config)
+    # 3. Override config with any --set arguments from the command line
+    override_parts = []
+    if args.config_overrides:
+        # The 'append' action creates a list of lists, so we need to flatten it.
+        flat_overrides = [item for sublist in args.config_overrides for item in sublist]
+        for override in flat_overrides:
+            try:
+                key, value_str = override.split('=', 1)
+            except ValueError:
+                raise ValueError(f"Invalid override format: {override}. Expected KEY=VALUE.")
 
-    # 4. Build model
-    logger.info("[1/6] Building model...")
-    model = build_model(config)
+            # Try to intelligently convert the value string to a Python type
+            try:
+                value = int(value_str)
+            except ValueError:
+                try:
+                    value = float(value_str)
+                except ValueError:
+                    if value_str.lower() == 'true':
+                        value = True
+                    elif value_str.lower() == 'false':
+                        value = False
+                    else:
+                        value = value_str # Keep as string if it's not a number or boolean
+            
+            set_nested_key(config, key, value)
+            
+            # For directory naming, use a sanitized key and value
+            sanitized_key = key.split('.')[-1] # Use the last part of the key
+            override_parts.append(f"{sanitized_key}{value}")
 
-    # 5. Get raw datasets
-    logger.info("[2/6] Preparing dataset...")
-    train_dataset, test_dataset = get_datasets(config)
-
-    # 6. Build input transform or processor
-    logger.info("[3/6] Configuring transforms...")
-    model_type = config["model"]["type"]
-    input_size = get_input_size(model, config)
-
-    if model_type == "image":
-        in_channels = input_size[0]
-        resize = input_size[1:]
-
-
-        transform_list = [transforms.Resize(resize)]
-        if hasattr(train_dataset[0][0], 'mode') and train_dataset[0][0].mode == 'L' and in_channels == 3:
-            transform_list.append(transforms.Grayscale(3))
-        transform_list.append(transforms.ToTensor())
-
-        transform = transforms.Compose(transform_list)
-        train_dataset.transform = transform
-        test_dataset.transform = transform
-
-    elif model_type == "text":
-        # Assuming the dataset is already tokenized by get_datasets
-        logger.info("Text dataset assumed pre-tokenized.")
-        pass
-
-    elif model_type == "tabular":
-        # Assuming the dataset is already scaled (e.g., StandardScaler) by get_datasets
-        logger.info("Tabular dataset assumed pre-scaled.")
-        pass
-
-    elif model_type == "synthetic":
-        # No specific preprocessing needed for synthetic datasets
-        logger.info("Synthetic dataset assumed to require no transform.")
-        pass
-
-    else:
-        raise ValueError(f"Unsupported model type: {model_type}")
-
-    # 7. Create DataLoaders
-    logger.info("[4/6] Creating dataloaders...")
-    batch_size = config['data']['batch_size']
-    num_workers = config['data'].get('num_workers', 4)
-    pin_memory = torch.cuda.is_available()
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=pin_memory)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False,
-                             num_workers=num_workers, pin_memory=pin_memory)
-
-    # 8. Create trainer
-    logger.info("[5/6] Creating trainer...")
-    trainer = get_trainer(config, model, train_loader, test_loader, logger)
-
-    # 9. Train
-    logger.info("[6/6] Starting training loop...")
-    trainer.train()
-    logger.finish_wandb()
-
+    # 4. Build the predictable "experiment group" directory name
+    config_filename = Path(args.config).stem
+    group_name_parts = [config_filename] + override_parts
+    experiment_group_name = "_".join(group_name_parts)
+    
+    # The parent directory for all runs with these settings
+    experiment_group_dir = Path(config.get('output_dir', 'outputs')) / experiment_group_name
+    
+    # 5. Call the main training function from the trainer module
+    train(config, experiment_group_dir, args.resume_id)
 
 if __name__ == "__main__":
     main()
