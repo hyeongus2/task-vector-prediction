@@ -6,26 +6,25 @@ model_id: openai/clip-vit-base-patch32
 
 # Data settings
 data:
-    name: tanganke/eurosat
-    image_column_name: image  # Changed from 'img' to 'image' for EuroSAT
+    name: ethz/food101
+    image_column_name: image
     label_column_name: label
 
-    # EuroSAT only has a 'train' split, so we need to create a validation set automatically.
     split_strategy: auto_split
-    validation_split_size: 0.2  # Use 20% of the data for validation
+    validation_split_size: 0.2
 
-    batch_size: 256
+    batch_size: 128
     num_workers: 4
 
 # Finetuning settings (kept the same for a direct comparison)
 finetuning:
-    method: lora
-    optimizer: adam
+    method: full
+    optimizer: adamw
     epochs: 20
     lr: 1.e-4
     momentum: 0.0
 
-    # LoRA settings
+    # LoRA settings (kept even if method=full; simply unused)
     lora:
         r: 16
         lora_alpha: 32
@@ -35,9 +34,9 @@ finetuning:
 
 # Analysis & Save settings
 analysis:
-    save_tau_every_n_steps: 50
-    num_monitoring_elements: 20  # For trainer
-    num_analysis_elements: 50  # For analyzer
+    save_tau_every_n_steps: 100
+    num_monitoring_elements: 20
+    num_analysis_elements: 50
 
 # Logging settings
 logging:

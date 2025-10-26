@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # scripts/setup.sh
 # This script intelligently sets up the Python virtual environment.
 #

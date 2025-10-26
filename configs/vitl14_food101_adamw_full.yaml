@@ -6,7 +6,7 @@ model_id: openai/clip-vit-large-patch14
 
 # Data settings
 data:
-    name: tanganke/eurosat
+    name: ethz/food101
     image_column_name: image
     label_column_name: label
 
@@ -18,7 +18,7 @@ data:
 
 # Finetuning settings (kept the same for a direct comparison)
 finetuning:
-    method: lora
+    method: full
     optimizer: adamw
     epochs: 20
     lr: 1.e-4

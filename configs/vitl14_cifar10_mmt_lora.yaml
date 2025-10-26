@@ -6,11 +6,11 @@ model_id: openai/clip-vit-large-patch14
 
 # Data settings
 data:
-    name: tanganke/eurosat
-    image_column_name: image
+    name: cifar10
+    image_column_name: img
     label_column_name: label
 
-    split_strategy: auto_split
+    split_strategy: pre_split
     validation_split_size: 0.2
 
     batch_size: 128
@@ -19,10 +19,10 @@ data:
 # Finetuning settings (kept the same for a direct comparison)
 finetuning:
     method: lora
-    optimizer: adamw
-    epochs: 20
-    lr: 1.e-4
-    momentum: 0.0
+    optimizer: sgd
+    epochs: 40
+    lr: 1.e-2
+    momentum: 0.9
 
     # LoRA settings (kept even if method=full; simply unused)
     lora:

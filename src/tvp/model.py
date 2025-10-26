@@ -33,7 +33,7 @@ def create_model(config: Dict, class_names: List[str], processor: CLIPProcessor,
     finetune_config = config['finetuning']
     
     logger.info(f"Loading pre-trained base CLIP model: {model_id}")
-    model = CLIPModel.from_pretrained(model_id)
+    model = CLIPModel.from_pretrained(model_id, use_safetensors=True)
 
     # --- Apply finetuning strategy ---
     finetune_method = finetune_config.get('method', 'full')
