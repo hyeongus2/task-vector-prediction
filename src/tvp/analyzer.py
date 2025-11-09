@@ -96,7 +96,7 @@ def get_fitting_config(optimizer: str, space: str, k: int, N: int) -> dict:
         'num_trials': 20 if space == 'adapter' else 5,
         'num_final_candidates': 3,
         'num_alternating_steps': 30,
-        'num_r_steps_per_alternation': 5,
+        'num_r_steps_per_alternation': 30,
         'lr_r': 1e-3,
         'r_reg_lambda': final_r_reg_lambda,
         'A_reg_lambda': final_A_reg_lambda,
@@ -290,18 +290,31 @@ def analyze(args: argparse.Namespace, config: dict):
                 pred_model.A.data = A_new
 
             # --- STEP 2: Fix A, Update r ---
-            for _ in range(num_r_steps_per_alternation):
+            for inner_i in range(num_r_steps_per_alternation):
                 optimizer_r.zero_grad()
                 predicted_y = pred_model(x_data)
                 mse_loss = F.mse_loss(predicted_y, y_data)
-                
+
                 # Ridge Regularization to penalize large r values
                 current_rates = F.softplus(pred_model.log_r)
                 reg_loss = torch.sum(current_rates ** 2)
-                
+
                 total_loss = mse_loss + r_reg_lambda * reg_loss
                 total_loss.backward()
                 optimizer_r.step()
+
+                # Log progress for inner updates at a coarse sampling interval
+                try:
+                    sample_every = max(1, num_r_steps_per_alternation // 5)
+                    if inner_i % sample_every == 0 or inner_i == num_r_steps_per_alternation - 1:
+                        r_mean = float(current_rates.mean().detach().cpu().item())
+                        r_std = float(current_rates.std().detach().cpu().item())
+                        logger.info(
+                            f"trial={trial+1}/{num_trials} alt={step+1}/{num_alternating_steps} inner={inner_i+1}/{num_r_steps_per_alternation} "
+                            f"loss={total_loss.item():.4e} mse={mse_loss.item():.4e} r_mean={r_mean:.4e} r_std={r_std:.4e}"
+                        )
+                except Exception:
+                    pass
 
         # Final update of A for the last updated r
         # Ensure the final (A, r) pair is consistent

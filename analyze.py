@@ -38,6 +38,12 @@ def main():
     )
     parser.add_argument("--k", type=int, default=3, help="Number of exponential terms (k) for the trajectory model.")
     parser.add_argument("--N", type=int, default=6, help="Number of early data points (N) to use for fitting.")
+    # Optional overrides for analysis hyperparameters (helps quick experiments without editing config)
+    parser.add_argument("--num_trials", type=int, default=None, help="Override config.analysis.num_trials")
+    parser.add_argument("--num_alternating_steps", type=int, default=None, help="Override config.analysis.num_alternating_steps")
+    parser.add_argument("--num_r_steps_per_alternation", type=int, default=None, help="Override config.analysis.num_r_steps_per_alternation")
+    parser.add_argument("--num_final_candidates", type=int, default=None, help="Override config.analysis.num_final_candidates")
+    parser.add_argument("--lr_r", type=float, default=None, help="Override config.analysis.lr_r")
     
     args = parser.parse_args()
 
@@ -55,6 +61,19 @@ def main():
         return
 
     set_seed(config.get('seed', 42))
+
+    # Apply CLI overrides to config.analysis if provided
+    config.setdefault('analysis', {})
+    if args.num_trials is not None:
+        config['analysis']['num_trials'] = args.num_trials
+    if args.num_alternating_steps is not None:
+        config['analysis']['num_alternating_steps'] = args.num_alternating_steps
+    if args.num_r_steps_per_alternation is not None:
+        config['analysis']['num_r_steps_per_alternation'] = args.num_r_steps_per_alternation
+    if args.num_final_candidates is not None:
+        config['analysis']['num_final_candidates'] = args.num_final_candidates
+    if args.lr_r is not None:
+        config['analysis']['lr_r'] = args.lr_r
 
     # Call the main analysis engine, passing both args and config
     analyze(args=args, config=config)
