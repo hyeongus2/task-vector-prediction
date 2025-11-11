@@ -93,7 +93,8 @@ def get_fitting_config(optimizer: str, space: str, k: int, N: int) -> dict:
     # The lower base value for operational space already handles this.
 
     return {
-        'num_trials': 20 if space == 'adapter' else 5,
+        # Reduce default multi-starts for adapter space to 5 (was 20) — faster and matches prior behavior
+        'num_trials': 5 if space == 'adapter' else 5,
         'num_final_candidates': 3,
         'num_alternating_steps': 30,
         'num_r_steps_per_alternation': 30,
@@ -293,6 +294,8 @@ def analyze(args: argparse.Namespace, config: dict):
             for inner_i in range(num_r_steps_per_alternation):
                 optimizer_r.zero_grad()
                 predicted_y = pred_model(x_data)
+
+                # Compute the training loss (we don't separately print MSE)
                 mse_loss = F.mse_loss(predicted_y, y_data)
 
                 # Ridge Regularization to penalize large r values
@@ -303,18 +306,26 @@ def analyze(args: argparse.Namespace, config: dict):
                 total_loss.backward()
                 optimizer_r.step()
 
-                # Log progress for inner updates at a coarse sampling interval
-                try:
-                    sample_every = max(1, num_r_steps_per_alternation // 5)
-                    if inner_i % sample_every == 0 or inner_i == num_r_steps_per_alternation - 1:
-                        r_mean = float(current_rates.mean().detach().cpu().item())
-                        r_std = float(current_rates.std().detach().cpu().item())
-                        logger.info(
-                            f"trial={trial+1}/{num_trials} alt={step+1}/{num_alternating_steps} inner={inner_i+1}/{num_r_steps_per_alternation} "
-                            f"loss={total_loss.item():.4e} mse={mse_loss.item():.4e} r_mean={r_mean:.4e} r_std={r_std:.4e}"
-                        )
-                except Exception:
-                    pass
+            # After completing inner updates for this alternation, log at the sampled alternation frequency
+            try:
+                alt_sample_every = max(1, num_alternating_steps // 6)
+                should_log_alt = (step % alt_sample_every == 0 or step == num_alternating_steps - 1)
+
+                if should_log_alt:
+                    r_vals = [float(v) for v in current_rates.detach().cpu().tolist()]
+                    # Format r values compactly
+                    try:
+                        r_vals_str = ','.join([f"{v:.6f}" for v in r_vals])
+                    except Exception:
+                        r_vals_str = str(r_vals)
+
+                    logger.info(
+                        f"trial={trial+1}/{num_trials} alt={step+1}/{num_alternating_steps} "
+                        f"loss={total_loss.item():.4e} r=[{r_vals_str}]"
+                    )
+            except Exception:
+                # Don't let logging errors interrupt optimization
+                pass
 
         # Final update of A for the last updated r
         # Ensure the final (A, r) pair is consistent
