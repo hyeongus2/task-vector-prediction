@@ -4,7 +4,7 @@
 
 ## 연구와 구현
 
-심현성이 KAIRI 학부생 연구인턴(공식 참여 기간 2025년 7–10월)과 이후 개인 연구에서 진행한 실험입니다. 문제·가정 검토, 학습 및 분석 코드 통합, 서버 실험과 결과 해석에 생성형 AI의 도움을 사용했습니다.
+KAIRI 학부생 연구인턴(2025년 7–10월)에서 시작해 이후 개인 연구로 이어간 실험입니다. 파라미터 변화의 표현 방식과 예측 가정을 검토하고, 미세조정·궤적 적합·후보 가중치 평가를 하나의 파이프라인으로 구성했습니다.
 
 - `train.py`: YAML 설정 기반 CLIP 미세조정, 초기 가중치·분류 텍스트 특징·task vector·체크포인트 저장
 - `analyze.py`: 초기 관측점 선택, 지수 궤적 적합, 예측 가중치 평가와 시각화
@@ -12,7 +12,7 @@
 - `src/tvp/analyzer.py`: A의 해석적 해와 rate의 gradient 업데이트를 교대로 최적화
 - `configs/`: ViT-B/32·ViT-L/14, CIFAR-10·EuroSAT·Food-101, SGD·momentum·AdamW, full·LoRA 조합
 
-LoRA adapter 공간과 `B @ A`로 만든 operational 공간은 서로 다릅니다. 현재 operational 변환은 LoRA alpha/r scaling을 포함하지 않으므로 실제 merge된 가중치와 동일한 수치라고 해석하지 않습니다. 특정 정확도 개선이나 미세조정 대체 효과가 재현되었다고 주장하지 않습니다.
+예측 대상은 LoRA adapter 파라미터 또는 `B @ A`로 구성한 operational task vector입니다. 두 공간의 차이와 평가 제약은 아래 실험 상태를 참고하세요.
 
 ## 환경
 
@@ -41,14 +41,16 @@ python train.py --config configs/vitb32_eurosat_adamw_lora.yaml --set logging.wa
 
 재개할 때는 기존과 동일한 config·override를 사용합니다. W&B를 꺼도 원래 실행 폴더를 다시 사용하며 초기 기준점과 텍스트 특징을 보존합니다. 필요한 파일이 없거나 config가 달라지면 새 학습으로 조용히 넘어가지 않고 오류를 냅니다.
 
-## 검증과 결과의 범위
+## 테스트와 실험 상태
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-CPU 합성 테스트로 비기본 체크포인트 저장 간격, 부족하거나 중복되는 적합 관측점, 재개 파일 보존, 지수 궤적의 경계값과 작은 rate의 수치 안정성을 검증합니다. 이 검증은 CLIP 재학습이나 실제 데이터에서 예측 성능을 재현한 결과가 아닙니다. GPU 실험, LoRA scaling·초기 adapter 기준점 및 후보 모델 선택의 전체 분석은 추가 확인 대상입니다.
+CPU 합성 테스트는 체크포인트 간격, 적합 관측점 검증, 학습 재개 시 기준점 유지, 지수 궤적의 경계값과 작은 rate의 수치 안정성을 다룹니다.
 
-대용량 checkpoint, W&B 실행 기록, 다운로드 데이터와 연구실 행정·공유 자료는 저장소에 포함하지 않습니다.
+현재 operational 변환은 LoRA의 alpha/r scaling을 포함하지 않아 실제 merge 가중치와 값이 다릅니다. 예측 성능을 비교하려면 scaling, 초기 adapter 기준점, 후보 모델 선택 절차를 먼저 정리하고 동일한 모델·데이터 조건에서 GPU 평가를 수행해야 합니다. 현재 테스트 결과는 위 수치 계산과 파일 처리에 대한 단위 검증입니다.
 
-공식 참여 기간은 [KAIRI 인턴 참여확인서 원본](https://github.com/hyeongus2/hyeongus2/blob/main/docs/certificates/KAIRI-internship.pdf)에서 확인할 수 있습니다.
+실험 결과와 checkpoint는 `outputs/`에 저장하며, 실행 기록은 W&B 사용 여부에 따라 로컬 또는 W&B에서 조회합니다.
+
+[KAIRI 인턴 참여확인서](https://github.com/hyeongus2/hyeongus2/blob/main/docs/certificates/KAIRI-internship.pdf)
