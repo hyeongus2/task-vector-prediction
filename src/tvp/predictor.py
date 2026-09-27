@@ -42,7 +42,7 @@ class TrajectoryPredictor(torch.nn.Module):
         t = t.unsqueeze(1)
         rates = rates.unsqueeze(0)
         
-        exp_term = 1 - torch.exp(-rates * t)
+        exp_term = -torch.expm1(-rates * t)
         
         # Matrix multiplication: [N, k] @ [k, d] -> [N, d]
         # This uses the 'A' buffer, which is updated externally during alternating optimization.

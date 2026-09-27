@@ -1,0 +1,12 @@
+# Install the PyTorch build appropriate for your device separately.
+torch>=2.5,<3
+torchvision>=0.20
+accelerate>=1.1
+datasets>=3,<5
+transformers>=4.45,<5
+peft>=0.13,<1
+numpy>=1.26
+matplotlib>=3.8
+PyYAML>=6
+tqdm>=4.66
+wandb>=0.18

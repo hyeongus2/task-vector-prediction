@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 import yaml
 
 from . import utils, data_loader, model as model_loader
+from .artifacts import resolve_run_directory
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
@@ -72,13 +73,19 @@ def train(config: dict, experiment_group_dir: Path, resume_id: Optional[str] = N
             resume="must" if resume_id else None
         )
     
-    run_id = run.id if run else datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = experiment_group_dir / run_id
+    run_id = resume_id or (run.id if run else datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f"))
+    output_dir = resolve_run_directory(experiment_group_dir, run_id, resume=bool(resume_id))
     task_vectors_dir = output_dir / "task_vectors"
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    with open(output_dir / "effective_config.yaml", 'w') as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    if resume_id:
+        with open(output_dir / "effective_config.yaml", encoding="utf-8") as f:
+            saved_config = yaml.safe_load(f)
+        if saved_config != config:
+            raise ValueError("Resume configuration differs from effective_config.yaml; use the original configuration")
+    else:
+        with open(output_dir / "effective_config.yaml", 'w', encoding="utf-8") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
     
     utils.set_seed(config.get('seed', 42))
     
@@ -94,11 +101,16 @@ def train(config: dict, experiment_group_dir: Path, resume_id: Optional[str] = N
     # --- 3. Model Creation ---
     model, text_features = model_loader.create_model(config, class_names, processor, device)
     
-    theta0_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-    logger.info("Saving initial model state (theta0)...")
-    utils.save_torch(theta0_state_dict, output_dir / "theta0.pt")
-    logger.info("Saving text features (classifier weights)...")
-    utils.save_torch(text_features, output_dir / "text_features.pt")
+    if resume_id:
+        # The original reference must survive recreation of random LoRA adapters.
+        theta0_state_dict = utils.load_torch(output_dir / "theta0.pt")
+        text_features = utils.load_torch(output_dir / "text_features.pt").to(device)
+    else:
+        theta0_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+        logger.info("Saving initial model state (theta0)...")
+        utils.save_torch(theta0_state_dict, output_dir / "theta0.pt")
+        logger.info("Saving text features (classifier weights)...")
+        utils.save_torch(text_features, output_dir / "text_features.pt")
 
     # --- 4. Optimizer Setup ---
     finetune_config = config['finetuning']
@@ -127,7 +139,7 @@ def train(config: dict, experiment_group_dir: Path, resume_id: Optional[str] = N
             best_val_loss = checkpoint.get('best_val_loss', float('inf'))
             logger.info(f"Resumed from Epoch {start_epoch}, Global Step {global_step}")
         else:
-            logger.warning(f"Resume ID provided, but checkpoint file not found. Starting from scratch.")
+            raise FileNotFoundError(f"Resume checkpoint disappeared: {checkpoint_path}")
 
     # --- 6. Monitoring Setup ---
     wandb_tracked_indices = None

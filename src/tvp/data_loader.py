@@ -51,7 +51,7 @@ def get_dataloaders(config: Dict, processor: CLIPProcessor) -> Tuple[DataLoader,
         val_split_size = data_config.get('validation_split_size', 0.2)
         logger.info(f"Automatically splitting 'train' data. Validation size: {val_split_size}")
         # Split the 'train' dataset into a new training and validation set
-        split_dataset = dataset['train'].train_test_split(test_size=val_split_size)
+        split_dataset = dataset['train'].train_test_split(test_size=val_split_size, seed=config.get('seed', 42))
         train_dataset = split_dataset['train']
         val_dataset = split_dataset['test'] # This is the new validation set
     else:

@@ -12,6 +12,7 @@ from peft import set_peft_model_state_dict
 # Import from our local modules
 from . import utils, data_loader, model as model_loader, plotting, predictor
 from .trainer import evaluate
+from .artifacts import select_fitting_indices
 
 # Create a logger for this module
 logger = logging.getLogger(__name__)
@@ -179,7 +180,7 @@ def analyze(args: argparse.Namespace, config: dict):
 
     # 2. Define a spacing multiplier based on the optimizer's learning speed
     # The base interval between saved checkpoints is assumed to be 50 steps.
-    STEP_INTERVAL = 50 
+    STEP_INTERVAL = int(config['analysis']['save_tau_every_n_steps'])
     
     if optimizer == 'sgd':
         # SGD is the slowest, so sample points very far apart to see the long-term trend.
@@ -200,7 +201,7 @@ def analyze(args: argparse.Namespace, config: dict):
 
     # 4. Find the indices in the full trajectory that are closest to our target steps
     # This robustly finds the available data points nearest to our desired sample points.
-    indices = torch.searchsorted(all_steps, target_steps)
+    indices = select_fitting_indices(all_steps.tolist(), N, STEP_INTERVAL, STEP_MULTIPLIER)
 
     # 5. Select the final data using the found indices
     x_data = all_steps[indices]
@@ -278,7 +279,7 @@ def analyze(args: argparse.Namespace, config: dict):
             # --- STEP 1: Fix r, Solve for A ---
             with torch.no_grad():
                 rates = F.softplus(pred_model.log_r)
-                F_matrix = 1 - torch.exp(-rates.unsqueeze(0) * x_data.unsqueeze(1))
+                F_matrix = -torch.expm1(-rates.unsqueeze(0) * x_data.unsqueeze(1))
 
                 # Use Ridge Regression to solve for A
                 # This prevents the Frobenius norm of A from becoming too large.
@@ -332,7 +333,7 @@ def analyze(args: argparse.Namespace, config: dict):
         logger.debug("Performing final update of A for the last r.")
         with torch.no_grad():
             rates = F.softplus(pred_model.log_r)
-            F_matrix = 1 - torch.exp(-rates.unsqueeze(0) * x_data.unsqueeze(1))
+            F_matrix = -torch.expm1(-rates.unsqueeze(0) * x_data.unsqueeze(1))
             FtF = F_matrix.T @ F_matrix
             FtY = F_matrix.T @ y_data
             identity = torch.eye(k, device=FtF.device)
@@ -361,8 +362,8 @@ def analyze(args: argparse.Namespace, config: dict):
     losses = torch.tensor([r['loss'] for r in trial_results])
     a_norms = torch.tensor([r['A_norm'] for r in trial_results])
 
-    z_losses = (losses - losses.mean()) / (losses.std() + EPSILON)
-    z_a_norms = (a_norms - a_norms.mean()) / (a_norms.std() + EPSILON)
+    z_losses = (losses - losses.mean()) / (losses.std(unbiased=False) + EPSILON)
+    z_a_norms = (a_norms - a_norms.mean()) / (a_norms.std(unbiased=False) + EPSILON)
 
     # Calculate a combined score based on standardized values
     for i, r in enumerate(trial_results):

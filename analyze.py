@@ -47,8 +47,8 @@ def main():
     
     args = parser.parse_args()
 
-    if args.N <= args.k:
-        logger.error(f"Number of data points (N={args.N}) must be greater than k={args.k} for fitting."); return
+    if args.k <= 0 or args.N <= args.k:
+        parser.error(f"Number of data points (N={args.N}) must be greater than k={args.k} for fitting.")
 
     try:
         # Load the configuration file from the experiment directory
@@ -58,7 +58,7 @@ def main():
     except FileNotFoundError:
         logger.error(f"Config file not found at: {config_path}")
         logger.error("Please ensure the --exp_dir argument points to a valid experiment output directory.")
-        return
+        raise SystemExit(2)
 
     set_seed(config.get('seed', 42))
 
